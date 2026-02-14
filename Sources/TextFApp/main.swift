@@ -85,7 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Show Selected Text", action: #selector(handleShowSelectedText), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Debug Permission Status", action: #selector(handleDebugStatus), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Debug Panel", action: #selector(handleDebugPanel), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit TextF", action: #selector(handleQuit), keyEquivalent: "q"))
 
@@ -110,7 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func handleDebugStatus() {
+    @objc private func handleDebugPanel() {
         let trusted = AXIsProcessTrusted()
         let bundleID = Bundle.main.bundleIdentifier ?? "unknown"
         let executablePath = Bundle.main.executableURL?.path ?? "unknown"
@@ -118,6 +118,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let frontmost = NSWorkspace.shared.frontmostApplication
         let frontmostName = frontmost?.localizedName ?? "unknown"
         let frontmostPID = frontmost?.processIdentifier ?? -1
+        let frontmostBundleID = frontmost?.bundleIdentifier ?? "unknown"
+        let focusedAppPID = SelectedTextReader.debugFocusedApplicationPID()?.description ?? "nil"
 
         var focusedStatus = "unknown"
         let systemWide = AXUIElementCreateSystemWide()
@@ -130,17 +132,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let message = """
-        AX Trusted: \(trusted)
+        [App]
         Bundle ID: \(bundleID)
         Executable: \(executablePath)
         Self PID: \(selfPID)
-        Frontmost App: \(frontmostName) (\(frontmostPID))
-        Last External PID: \(lastExternalAppPID?.description ?? "nil")
+        Hotkey: Command + Shift + F
+
+        [Permissions / AX]
+        AX Trusted: \(trusted)
         Focused Element: \(focusedStatus)
+        Focused App PID (AX): \(focusedAppPID)
+
+        [Frontmost App]
+        Name: \(frontmostName)
+        PID: \(frontmostPID)
+        Bundle ID: \(frontmostBundleID)
+        Last External PID: \(lastExternalAppPID?.description ?? "nil")
+
+        [SelectedTextReader]
+        \(SelectedTextReader.debugSnapshot(preferredAppPID: lastExternalAppPID))
         """
 
         let alert = NSAlert()
-        alert.messageText = "TextF Debug"
+        alert.messageText = "TextF Debug Panel"
         alert.informativeText = message
         alert.addButton(withTitle: "OK")
         alert.runModal()
@@ -286,6 +300,34 @@ enum SelectedTextReader {
         return nil
     }
 
+    static func debugFocusedApplicationPID() -> pid_t? {
+        focusedApplicationPID()
+    }
+
+    static func debugSnapshot(preferredAppPID: pid_t?) -> String {
+        var lines: [String] = []
+        lines.append("AX Timeout: \(axTimeout)s")
+        lines.append("Max Retries: \(maxRetries)")
+        lines.append("Retry Delay: \(retryDelayMicroseconds)us")
+
+        let focusedPID = focusedApplicationPID()
+        lines.append("Focused PID Probe: \(focusedPID?.description ?? "nil")")
+
+        let focusedResult = focusedPID.flatMap { selectedText(fromAppPID: $0) }
+        lines.append("Focused App Text: \(textSummary(focusedResult))")
+
+        let preferredResult = preferredAppPID.flatMap { selectedText(fromAppPID: $0) }
+        lines.append("Preferred App Text: \(textSummary(preferredResult))")
+
+        let systemWide = AXUIElementCreateSystemWide()
+        AXUIElementSetMessagingTimeout(systemWide, axTimeout)
+        let systemWideResult = focusedElement(from: systemWide).flatMap { selectedText(from: $0) }
+        lines.append("System-Wide Focused Element Text: \(textSummary(systemWideResult))")
+
+        lines.append("Pasteboard Fallback: enabled (not executed in panel)")
+        return lines.joined(separator: "\n")
+    }
+
     private static func selectedText(fromAppPID pid: pid_t) -> String? {
         guard NSRunningApplication(processIdentifier: pid) != nil else { return nil }
         let appElement = AXUIElementCreateApplication(pid)
@@ -418,6 +460,15 @@ enum SelectedTextReader {
         guard cfRange.location <= nsText.length, upperBound <= nsText.length else { return nil }
         let nsRange = NSRange(location: cfRange.location, length: cfRange.length)
         return nsText.substring(with: nsRange)
+    }
+
+    private static func textSummary(_ text: String?) -> String {
+        guard let text else { return "nil" }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "empty" }
+        let preview = String(trimmed.prefix(120))
+        let suffix = trimmed.count > 120 ? "..." : ""
+        return "len=\(trimmed.count), preview=\"\(preview)\(suffix)\""
     }
 
     private struct PasteboardSnapshot {
