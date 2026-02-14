@@ -550,6 +550,8 @@ final class FloatingPanelController {
     private let minFontSize: CGFloat = 8
     private let maxFontSize: CGFloat = 36
     private let fontSizeDefaultsKey = "floatingPanel.fontSize"
+    private let mouseOffsetX: CGFloat = 16
+    private let mouseOffsetY: CGFloat = 16
 
     init() {
         let storedSize = UserDefaults.standard.object(forKey: fontSizeDefaultsKey) as? Double
@@ -571,6 +573,7 @@ final class FloatingPanelController {
         guard let panel, let hostingView else { return }
 
         hostingView.rootView = FloatingTextView(text: currentText, fontSize: fontSize)
+        positionPanelNearMouse(panel)
         _ = NSRunningApplication.current.activate(options: [.activateIgnoringOtherApps])
         NSApp.activate(ignoringOtherApps: true)
         panel.orderFrontRegardless()
@@ -654,6 +657,22 @@ final class FloatingPanelController {
 
     private func persistFontSize() {
         UserDefaults.standard.set(Double(fontSize), forKey: fontSizeDefaultsKey)
+    }
+
+    private func positionPanelNearMouse(_ panel: NSPanel) {
+        let mouseLocation = NSEvent.mouseLocation
+        let panelSize = panel.frame.size
+        let targetScreen = NSScreen.screens.first { $0.frame.contains(mouseLocation) } ?? NSScreen.main
+        let visibleFrame = targetScreen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? NSRect.zero
+        guard !visibleFrame.isEmpty else { return }
+
+        var originX = mouseLocation.x + mouseOffsetX
+        var originY = mouseLocation.y - panelSize.height - mouseOffsetY
+
+        originX = min(max(originX, visibleFrame.minX), visibleFrame.maxX - panelSize.width)
+        originY = min(max(originY, visibleFrame.minY), visibleFrame.maxY - panelSize.height)
+
+        panel.setFrameOrigin(NSPoint(x: originX, y: originY))
     }
 }
 
