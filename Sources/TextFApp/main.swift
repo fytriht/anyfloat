@@ -558,6 +558,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     private let mouseOffsetY: CGFloat = 16
     private let minPanelSize = NSSize(width: 300, height: 400)
     private let maxPanelSize = NSSize(width: 600, height: 800)
+    private let defaultPanelSize = NSSize(width: 300, height: 400)
 
     override init() {
         fontSize = defaultFontSize
@@ -581,6 +582,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         guard let panel, let hostingView else { return }
 
         hostingView.rootView = FloatingTextView(text: currentText, fontSize: fontSize)
+        resetPanelSizeToDefault(panel)
         positionPanelNearMouse(panel)
         _ = NSRunningApplication.current.activate(options: [.activateIgnoringOtherApps])
         NSApp.activate(ignoringOtherApps: true)
@@ -594,7 +596,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         hostingView.translatesAutoresizingMaskIntoConstraints = false
 
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 300, height: 400),
+            contentRect: NSRect(origin: .zero, size: defaultPanelSize),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -619,6 +621,13 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         installKeyMonitorIfNeeded()
         self.panel = panel
         self.hostingView = hostingView
+    }
+
+    private func resetPanelSizeToDefault(_ panel: NSPanel) {
+        panel.setFrame(
+            NSRect(origin: panel.frame.origin, size: defaultPanelSize),
+            display: true
+        )
     }
 
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
