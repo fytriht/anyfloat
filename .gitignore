@@ -1,0 +1,7 @@
+.build/
+.build-cache/
+.tmp/
+dist/
+.DS_Store
+.cache/
+.home/
