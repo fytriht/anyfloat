@@ -14,12 +14,320 @@ struct TextFApp: App {
     }
 }
 
+private struct HotKeyOption {
+    let keyCode: UInt32
+    let label: String
+}
+
+private final class HotKeyRecorderContainerView: NSView {
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(nil)
+        super.mouseDown(with: event)
+    }
+}
+
+private enum HotKeySettingsResult {
+    case save(HotKeyConfiguration)
+    case cancel
+}
+
+private final class HotKeyRecorderView: NSControl {
+    private let textField = NSTextField(labelWithString: "")
+    private(set) var recordedConfiguration: HotKeyConfiguration
+
+    override var acceptsFirstResponder: Bool { true }
+
+    init(configuration: HotKeyConfiguration, frame frameRect: NSRect) {
+        self.recordedConfiguration = configuration
+        super.init(frame: frameRect)
+        setupUI()
+        updateLabel()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        needsDisplay = true
+        return true
+    }
+
+    override func resignFirstResponder() -> Bool {
+        needsDisplay = true
+        return true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let modifierBits = HotKeyConfiguration.modifierBits(from: modifiers)
+        let keyCode = UInt32(event.keyCode)
+
+        guard HotKeyConfiguration.supportedKeys.contains(where: { $0.keyCode == keyCode }) else {
+            NSSound.beep()
+            return
+        }
+
+        let candidate = HotKeyConfiguration(keyCode: keyCode, modifiers: modifierBits)
+        guard candidate.isValid else {
+            NSSound.beep()
+            return
+        }
+
+        recordedConfiguration = candidate
+        updateLabel()
+        sendAction(action, to: target)
+    }
+
+    private func setupUI() {
+        wantsLayer = true
+        layer?.cornerRadius = 6
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor.separatorColor.cgColor
+        layer?.backgroundColor = NSColor.textBackgroundColor.cgColor
+
+        textField.translatesAutoresizingMaskIntoConstraints = false
+        textField.font = .systemFont(ofSize: 13, weight: .regular)
+        addSubview(textField)
+
+        NSLayoutConstraint.activate([
+            textField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            textField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            textField.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+    }
+
+    private func updateLabel() {
+        textField.stringValue = recordedConfiguration.displayLabel
+    }
+
+    func setRecordedConfiguration(_ configuration: HotKeyConfiguration) {
+        recordedConfiguration = configuration
+        updateLabel()
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        if window?.firstResponder === self {
+            NSColor.keyboardFocusIndicatorColor.setStroke()
+            let focusRect = bounds.insetBy(dx: 1.5, dy: 1.5)
+            let path = NSBezierPath(roundedRect: focusRect, xRadius: 5, yRadius: 5)
+            path.lineWidth = 2
+            path.stroke()
+        }
+    }
+}
+
+private final class HotKeySettingsPanelController: NSObject, NSWindowDelegate {
+    private let panel: NSPanel
+    private let recorder: HotKeyRecorderView
+
+    init(configuration: HotKeyConfiguration) {
+        panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 430, height: 170),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        recorder = HotKeyRecorderView(
+            configuration: configuration,
+            frame: NSRect(x: 20, y: 78, width: 300, height: 32)
+        )
+        super.init()
+        configurePanel()
+    }
+
+    func runModal() -> HotKeySettingsResult {
+        NSApp.activate(ignoringOtherApps: true)
+        panel.center()
+        panel.makeKeyAndOrderFront(nil)
+
+        let response = NSApp.runModal(for: panel)
+        panel.orderOut(nil)
+
+        switch response {
+        case .OK:
+            return .save(recorder.recordedConfiguration)
+        default:
+            return .cancel
+        }
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard NSApp.modalWindow === panel else { return }
+        NSApp.stopModal(withCode: .cancel)
+    }
+
+    private func configurePanel() {
+        panel.title = "Set Global Hotkey"
+        panel.isFloatingPanel = true
+        panel.level = .modalPanel
+        panel.isReleasedWhenClosed = false
+        panel.delegate = self
+
+        let contentView = HotKeyRecorderContainerView(frame: NSRect(x: 0, y: 0, width: 430, height: 170))
+        contentView.wantsLayer = true
+        panel.contentView = contentView
+
+        let helpLabel = NSTextField(labelWithString: "Click the field and press your shortcut.")
+        helpLabel.textColor = .secondaryLabelColor
+        helpLabel.frame = NSRect(x: 20, y: 126, width: 320, height: 18)
+        contentView.addSubview(helpLabel)
+
+        contentView.addSubview(recorder)
+
+        let saveButton = NSButton(title: "Save", target: self, action: #selector(handleSave))
+        saveButton.frame = NSRect(x: 330, y: 14, width: 82, height: 30)
+        saveButton.keyEquivalent = "\r"
+        contentView.addSubview(saveButton)
+
+        let cancelButton = NSButton(title: "Cancel", target: self, action: #selector(handleCancel))
+        cancelButton.frame = NSRect(x: 240, y: 14, width: 82, height: 30)
+        cancelButton.keyEquivalent = "\u{1b}"
+        contentView.addSubview(cancelButton)
+
+        let resetButton = NSButton(title: "Reset Default", target: self, action: #selector(handleResetDefault))
+        resetButton.frame = NSRect(x: 20, y: 14, width: 120, height: 30)
+        contentView.addSubview(resetButton)
+    }
+
+    @objc private func handleSave() {
+        NSApp.stopModal(withCode: .OK)
+    }
+
+    @objc private func handleCancel() {
+        NSApp.stopModal(withCode: .cancel)
+    }
+
+    @objc private func handleResetDefault() {
+        recorder.setRecordedConfiguration(HotKeyConfiguration.defaultValue)
+        panel.makeFirstResponder(recorder)
+    }
+}
+
+private struct HotKeyConfiguration: Codable {
+    let keyCode: UInt32
+    let modifiers: UInt32
+
+    static let defaultsKey = "globalHotKey.configuration"
+    static let defaultValue = HotKeyConfiguration(keyCode: UInt32(kVK_ANSI_F), modifiers: UInt32(cmdKey | shiftKey))
+
+    static let supportedKeys: [HotKeyOption] = [
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_A), label: "A"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_B), label: "B"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_C), label: "C"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_D), label: "D"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_E), label: "E"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_F), label: "F"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_G), label: "G"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_H), label: "H"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_I), label: "I"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_J), label: "J"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_K), label: "K"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_L), label: "L"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_M), label: "M"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_N), label: "N"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_O), label: "O"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_P), label: "P"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_Q), label: "Q"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_R), label: "R"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_S), label: "S"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_T), label: "T"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_U), label: "U"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_V), label: "V"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_W), label: "W"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_X), label: "X"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_Y), label: "Y"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_Z), label: "Z"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_0), label: "0"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_1), label: "1"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_2), label: "2"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_3), label: "3"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_4), label: "4"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_5), label: "5"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_6), label: "6"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_7), label: "7"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_8), label: "8"),
+        HotKeyOption(keyCode: UInt32(kVK_ANSI_9), label: "9"),
+        HotKeyOption(keyCode: UInt32(kVK_F1), label: "F1"),
+        HotKeyOption(keyCode: UInt32(kVK_F2), label: "F2"),
+        HotKeyOption(keyCode: UInt32(kVK_F3), label: "F3"),
+        HotKeyOption(keyCode: UInt32(kVK_F4), label: "F4"),
+        HotKeyOption(keyCode: UInt32(kVK_F5), label: "F5"),
+        HotKeyOption(keyCode: UInt32(kVK_F6), label: "F6"),
+        HotKeyOption(keyCode: UInt32(kVK_F7), label: "F7"),
+        HotKeyOption(keyCode: UInt32(kVK_F8), label: "F8"),
+        HotKeyOption(keyCode: UInt32(kVK_F9), label: "F9"),
+        HotKeyOption(keyCode: UInt32(kVK_F10), label: "F10"),
+        HotKeyOption(keyCode: UInt32(kVK_F11), label: "F11"),
+        HotKeyOption(keyCode: UInt32(kVK_F12), label: "F12")
+    ]
+
+    private static let allowedModifiers = UInt32(cmdKey | shiftKey | optionKey | controlKey)
+
+    static func modifierBits(from flags: NSEvent.ModifierFlags) -> UInt32 {
+        var bits: UInt32 = 0
+        if flags.contains(.command) { bits |= UInt32(cmdKey) }
+        if flags.contains(.shift) { bits |= UInt32(shiftKey) }
+        if flags.contains(.option) { bits |= UInt32(optionKey) }
+        if flags.contains(.control) { bits |= UInt32(controlKey) }
+        return bits
+    }
+
+    static func loadFromDefaults() -> HotKeyConfiguration {
+        guard
+            let data = UserDefaults.standard.data(forKey: defaultsKey),
+            let decoded = try? JSONDecoder().decode(HotKeyConfiguration.self, from: data),
+            decoded.isValid
+        else {
+            return defaultValue
+        }
+        return decoded
+    }
+
+    func persistToDefaults() {
+        guard let data = try? JSONEncoder().encode(self) else { return }
+        UserDefaults.standard.set(data, forKey: HotKeyConfiguration.defaultsKey)
+    }
+
+    var keyLabel: String {
+        HotKeyConfiguration.supportedKeys.first { $0.keyCode == keyCode }?.label ?? "KeyCode \(keyCode)"
+    }
+
+    var displayLabel: String {
+        let parts = modifierLabels + [keyLabel]
+        return parts.joined(separator: " + ")
+    }
+
+    var isValid: Bool {
+        guard HotKeyConfiguration.supportedKeys.contains(where: { $0.keyCode == keyCode }) else { return false }
+        let sanitized = modifiers & HotKeyConfiguration.allowedModifiers
+        return sanitized != 0
+    }
+
+    private var modifierLabels: [String] {
+        var labels: [String] = []
+        if modifiers & UInt32(cmdKey) != 0 { labels.append("Command") }
+        if modifiers & UInt32(shiftKey) != 0 { labels.append("Shift") }
+        if modifiers & UInt32(optionKey) != 0 { labels.append("Option") }
+        if modifiers & UInt32(controlKey) != 0 { labels.append("Control") }
+        return labels
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKeyRef: EventHotKeyRef?
     private var hotKeyHandlerRef: EventHandlerRef?
     private let panelController = FloatingPanelController()
     private var statusItem: NSStatusItem?
+    private var configureHotKeyMenuItem: NSMenuItem?
     private var lastExternalAppPID: pid_t?
+    private var hotKeyConfiguration = HotKeyConfiguration.loadFromDefaults()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -44,9 +352,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func registerHotKey() {
         unregisterHotKey()
 
-        // Command + Shift + F
-        let keyCode: UInt32 = 3 // kVK_ANSI_F
-        let modifiers: UInt32 = UInt32(cmdKey | shiftKey)
+        let keyCode: UInt32 = hotKeyConfiguration.keyCode
+        let modifiers: UInt32 = hotKeyConfiguration.modifiers
         let target = GetEventDispatcherTarget()
 
         let hotKeyID = EventHotKeyID(signature: OSType(UInt32(truncatingIfNeeded: "TXTF".fourCharCodeValue)), id: 1)
@@ -96,6 +403,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Show Selected Text", action: #selector(handleShowSelectedText), keyEquivalent: ""))
+        let hotKeyItem = NSMenuItem(title: "", action: #selector(handleConfigureHotKey), keyEquivalent: "")
+        hotKeyItem.target = self
+        configureHotKeyMenuItem = hotKeyItem
+        menu.addItem(hotKeyItem)
         menu.addItem(NSMenuItem(title: "Debug Panel", action: #selector(handleDebugPanel), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit TextF", action: #selector(handleQuit), keyEquivalent: "q"))
@@ -103,6 +414,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.items.forEach { $0.target = self }
         item.menu = menu
         self.statusItem = item
+        refreshConfigureHotKeyMenuItemTitle()
+    }
+
+    private func refreshConfigureHotKeyMenuItemTitle() {
+        configureHotKeyMenuItem?.title = "Set Hotkey"
     }
 
     @objc private func handleShowSelectedText() {
@@ -111,6 +427,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func handleQuit() {
         NSApp.terminate(nil)
+    }
+
+    @objc private func handleConfigureHotKey() {
+        let panelController = HotKeySettingsPanelController(configuration: hotKeyConfiguration)
+        switch panelController.runModal() {
+        case .save(let configuration):
+            applyHotKeyConfiguration(configuration)
+        case .cancel:
+            break
+        }
+    }
+
+    private func applyHotKeyConfiguration(_ configuration: HotKeyConfiguration) {
+        hotKeyConfiguration = configuration
+        hotKeyConfiguration.persistToDefaults()
+        refreshConfigureHotKeyMenuItemTitle()
+        registerHotKey()
     }
 
     private func requestAccessibilityIfNeeded() {
@@ -147,7 +480,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Bundle ID: \(bundleID)
         Executable: \(executablePath)
         Self PID: \(selfPID)
-        Hotkey: Command + Shift + F
+        Hotkey: \(hotKeyConfiguration.displayLabel)
 
         [Permissions / AX]
         AX Trusted: \(trusted)

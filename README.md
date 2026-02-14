@@ -2,15 +2,16 @@
 
 TextF is a native macOS menu bar app that captures selected text from other apps and shows it in a floating window.
 
-Select text anywhere, then press `Command + Shift + F`.
+Select text anywhere, then press your configured global hotkey (default: `Command + Shift + F`).
 
 ## Features
 
-- Global hotkey: `Command + Shift + F`
+- Configurable global hotkey (default: `Command + Shift + F`, persisted locally)
 - Floating panel (draggable, closable, always on top)
 - In-panel zoom: `Command + +` / `Command + -`, reset with `Command + 0` (default font size: `12`, persisted locally)
 - Status bar menu:
   - `Show Selected Text`
+  - `Set Hotkey`
   - `Debug Panel`
   - `Quit TextF`
 - Multi-strategy text extraction for better compatibility:
@@ -64,12 +65,13 @@ If permission is newly granted, quit and relaunch TextF.
 
 1. Launch TextF
 2. Select text in another app
-3. Press `Command + Shift + F`
+3. Press your configured global hotkey (default: `Command + Shift + F`)
 4. Selected text appears in the floating panel
 5. In the floating panel, use `Command + +` / `Command + -` to adjust font size
 6. Use `Command + 0` to reset font size to `12`
 
 You can also click the menu bar item `TextF` and choose `Show Selected Text`.
+To change the global hotkey, open `TextF` -> `Set Hotkey (...)`; settings are saved in local `UserDefaults`.
 
 ## Troubleshooting
 
