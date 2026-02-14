@@ -328,6 +328,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var configureHotKeyMenuItem: NSMenuItem?
     private var lastExternalAppPID: pid_t?
     private var hotKeyConfiguration = HotKeyConfiguration.loadFromDefaults()
+    private var isConfiguringHotKey = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -390,6 +391,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func onHotKeyPressed() {
+        guard !isConfiguringHotKey else { return }
         refreshLastExternalAppPIDFromCurrentFrontmost()
         let text = SelectedTextReader.readSelectedText(preferredAppPID: lastExternalAppPID) ?? "(No selected text)"
         panelController.show(text: text)
@@ -431,6 +433,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func handleConfigureHotKey() {
         let panelController = HotKeySettingsPanelController(configuration: hotKeyConfiguration)
+        isConfiguringHotKey = true
+        defer { isConfiguringHotKey = false }
         switch panelController.runModal() {
         case .save(let configuration):
             applyHotKeyConfiguration(configuration)
