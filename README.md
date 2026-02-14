@@ -8,6 +8,7 @@ Select text anywhere, then press your configured global hotkey (default: `Comman
 
 - Configurable global hotkey (default: `Command + Shift + F`, persisted locally)
 - Floating panel (draggable, closable, resizable, always on top, opens near mouse pointer)
+- Multiple floating panels: each hotkey trigger opens a new window
 - Panel size limits: minimum `300 x 400`, maximum `600 x 800`
 - In-panel zoom: `Command + +` / `Command + -`, reset with `Command + 0` (default font size: `12`, persisted locally)
 - Status bar menu:
@@ -67,7 +68,7 @@ If permission is newly granted, quit and relaunch TextF.
 1. Launch TextF
 2. Select text in another app
 3. Press your configured global hotkey (default: `Command + Shift + F`)
-4. Selected text appears in the floating panel
+4. Selected text appears in a new floating panel (you can trigger repeatedly to open multiple windows)
 5. In the floating panel, use `Command + +` / `Command + -` to adjust font size
 6. Use `Command + 0` to reset font size to `12`
 

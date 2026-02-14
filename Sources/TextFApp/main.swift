@@ -544,11 +544,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 final class FloatingPanelController: NSObject, NSWindowDelegate {
-    private var panel: NSPanel?
-    private var hostingView: NSHostingView<FloatingTextView>?
+    private struct PanelContext {
+        let panel: NSPanel
+        let hostingView: NSHostingView<FloatingTextView>
+        let text: String
+        var fontSize: CGFloat
+    }
+
+    private var panelContexts: [ObjectIdentifier: PanelContext] = [:]
     private var keyMonitor: Any?
-    private var currentText = ""
-    private var fontSize: CGFloat
+    private var preferredFontSize: CGFloat
 
     private let defaultFontSize: CGFloat = 12
     private let minFontSize: CGFloat = 8
@@ -561,11 +566,11 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     private let defaultPanelSize = NSSize(width: 300, height: 400)
 
     override init() {
-        fontSize = defaultFontSize
+        preferredFontSize = defaultFontSize
         super.init()
         let storedSize = UserDefaults.standard.object(forKey: fontSizeDefaultsKey) as? Double
         let initialSize = CGFloat(storedSize ?? Double(defaultFontSize))
-        fontSize = min(max(initialSize, minFontSize), maxFontSize)
+        preferredFontSize = min(max(initialSize, minFontSize), maxFontSize)
     }
 
     deinit {
@@ -575,13 +580,9 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     }
 
     func show(text: String) {
-        currentText = text
-        if panel == nil {
-            createPanel()
-        }
-        guard let panel, let hostingView else { return }
-
-        hostingView.rootView = FloatingTextView(text: currentText, fontSize: fontSize)
+        let context = createPanelContext(text: text, fontSize: preferredFontSize)
+        let panel = context.panel
+        panelContexts[ObjectIdentifier(panel)] = context
         resetPanelSizeToDefault(panel)
         positionPanelNearMouse(panel)
         _ = NSRunningApplication.current.activate(options: [.activateIgnoringOtherApps])
@@ -590,8 +591,8 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         panel.makeKeyAndOrderFront(nil)
     }
 
-    private func createPanel() {
-        let contentView = FloatingTextView(text: "", fontSize: fontSize)
+    private func createPanelContext(text: String, fontSize: CGFloat) -> PanelContext {
+        let contentView = FloatingTextView(text: text, fontSize: fontSize)
         let hostingView = NSHostingView(rootView: contentView)
         hostingView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -619,8 +620,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
         panel.contentView = hostingView
         installKeyMonitorIfNeeded()
-        self.panel = panel
-        self.hostingView = hostingView
+        return PanelContext(panel: panel, hostingView: hostingView, text: text, fontSize: fontSize)
     }
 
     private func resetPanelSizeToDefault(_ panel: NSPanel) {
@@ -637,10 +637,19 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         )
     }
 
+    func windowWillClose(_ notification: Notification) {
+        guard let panel = notification.object as? NSPanel else { return }
+        panelContexts.removeValue(forKey: ObjectIdentifier(panel))
+    }
+
     private func installKeyMonitorIfNeeded() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, let panel = self.panel, panel.isKeyWindow else {
+            guard
+                let self,
+                let panel = NSApp.keyWindow as? NSPanel,
+                self.panelContexts[ObjectIdentifier(panel)] != nil
+            else {
                 return event
             }
 
@@ -651,13 +660,13 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
             switch event.keyCode {
             case UInt16(kVK_ANSI_0), UInt16(kVK_ANSI_Keypad0):
-                self.resetFontSize()
+                self.resetFontSize(for: panel)
                 return nil
             case UInt16(kVK_ANSI_Minus), UInt16(kVK_ANSI_KeypadMinus):
-                self.adjustFontSize(by: -1)
+                self.adjustFontSize(by: -1, for: panel)
                 return nil
             case UInt16(kVK_ANSI_Equal), UInt16(kVK_ANSI_KeypadPlus):
-                self.adjustFontSize(by: 1)
+                self.adjustFontSize(by: 1, for: panel)
                 return nil
             default:
                 return event
@@ -665,27 +674,33 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    private func adjustFontSize(by delta: CGFloat) {
-        guard let hostingView else { return }
-        let nextSize = min(max(fontSize + delta, minFontSize), maxFontSize)
-        guard nextSize != fontSize else { return }
+    private func adjustFontSize(by delta: CGFloat, for panel: NSPanel) {
+        let panelID = ObjectIdentifier(panel)
+        guard var context = panelContexts[panelID] else { return }
+        let nextSize = min(max(context.fontSize + delta, minFontSize), maxFontSize)
+        guard nextSize != context.fontSize else { return }
 
-        fontSize = nextSize
+        context.fontSize = nextSize
+        context.hostingView.rootView = FloatingTextView(text: context.text, fontSize: nextSize)
+        panelContexts[panelID] = context
+        preferredFontSize = nextSize
         persistFontSize()
-        hostingView.rootView = FloatingTextView(text: currentText, fontSize: fontSize)
     }
 
-    private func resetFontSize() {
-        guard let hostingView else { return }
-        guard fontSize != defaultFontSize else { return }
+    private func resetFontSize(for panel: NSPanel) {
+        let panelID = ObjectIdentifier(panel)
+        guard var context = panelContexts[panelID] else { return }
+        guard context.fontSize != defaultFontSize else { return }
 
-        fontSize = defaultFontSize
+        context.fontSize = defaultFontSize
+        context.hostingView.rootView = FloatingTextView(text: context.text, fontSize: defaultFontSize)
+        panelContexts[panelID] = context
+        preferredFontSize = defaultFontSize
         persistFontSize()
-        hostingView.rootView = FloatingTextView(text: currentText, fontSize: fontSize)
     }
 
     private func persistFontSize() {
-        UserDefaults.standard.set(Double(fontSize), forKey: fontSizeDefaultsKey)
+        UserDefaults.standard.set(Double(preferredFontSize), forKey: fontSizeDefaultsKey)
     }
 
     private func positionPanelNearMouse(_ panel: NSPanel) {
