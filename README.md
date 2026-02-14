@@ -1,41 +1,89 @@
 # TextF
 
-Native macOS app. Select text anywhere, press the global hotkey, and the selected text shows in a floating, draggable, closable window.
+TextF is a native macOS menu bar app that captures selected text from other apps and shows it in a floating window.
 
-## Build
+Select text anywhere, then press `Command + Shift + F`.
+
+## Features
+
+- Global hotkey: `Command + Shift + F`
+- Floating panel (draggable, closable, always on top)
+- Status bar menu:
+  - `Show Selected Text`
+  - `Debug Panel`
+  - `Quit TextF`
+- Multi-strategy text extraction for better compatibility:
+  - Accessibility selected-text APIs
+  - Range-based extraction fallback
+  - Last-resort copy (`Command + C`) with pasteboard restore
+
+## Requirements
+
+- macOS 13.0+
+- Xcode Command Line Tools (`swift` command available)
+- Accessibility permission for TextF
+
+## Build and Run (SwiftPM)
 
 ```bash
-cd /Users/zhi/Developer/TextF
+cd .
 swift build -c release
-```
-
-## Run (binary)
-
-```bash
-cd /Users/zhi/Developer/TextF
 ./.build/release/TextFApp
 ```
 
-## Build `.app` bundle
+## Build `.app` Bundle
 
 ```bash
-cd /Users/zhi/Developer/TextF
+cd .
 ./scripts/package_app.sh
 ```
 
-The app bundle will be created at:
+Output app bundle:
 
-```
+```text
 dist/TextFApp.app
 ```
 
-## First launch permissions
+Signing behavior:
 
-The app needs Accessibility permission to read selected text.
+- Uses `Apple Development` identity if available
+- Falls back to ad-hoc signing when no identity is found
 
-Open:
+## First Launch Setup
 
-- System Settings
-- Privacy & Security
-- Accessibility
-- Enable `TextFApp`
+TextF requires Accessibility access to read selected text from other apps.
+
+1. Open `System Settings`
+2. Go to `Privacy & Security` -> `Accessibility`
+3. Enable `TextFApp`
+
+If permission is newly granted, quit and relaunch TextF.
+
+## Usage
+
+1. Launch TextF
+2. Select text in another app
+3. Press `Command + Shift + F`
+4. Selected text appears in the floating panel
+
+You can also click the menu bar item `TextF` and choose `Show Selected Text`.
+
+## Troubleshooting
+
+- `No selected text` appears:
+  - Confirm Accessibility permission is enabled
+  - Confirm target app/window is focused
+  - Re-select text and trigger hotkey again
+- Hotkey does not trigger:
+  - Check for shortcut conflicts with other tools
+  - Relaunch TextF
+- Some apps still fail:
+  - Open `TextF` -> `Debug Panel` to inspect AX/focus state
+
+## Project Layout
+
+```text
+Sources/TextFApp/main.swift   # app entry, hotkey, AX reader, floating panel
+scripts/package_app.sh        # build + app bundle packaging + signing
+Package.swift                 # SwiftPM manifest
+```
