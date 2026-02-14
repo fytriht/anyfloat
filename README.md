@@ -87,3 +87,8 @@ Sources/TextFApp/main.swift   # app entry, hotkey, AX reader, floating panel
 scripts/package_app.sh        # build + app bundle packaging + signing
 Package.swift                 # SwiftPM manifest
 ```
+
+## License
+
+This project is licensed under the GNU General Public License v3.0.
+See `LICENSE` for details.
