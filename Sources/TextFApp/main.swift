@@ -539,7 +539,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-final class FloatingPanelController {
+final class FloatingPanelController: NSObject, NSWindowDelegate {
     private var panel: NSPanel?
     private var hostingView: NSHostingView<FloatingTextView>?
     private var keyMonitor: Any?
@@ -552,8 +552,12 @@ final class FloatingPanelController {
     private let fontSizeDefaultsKey = "floatingPanel.fontSize"
     private let mouseOffsetX: CGFloat = 16
     private let mouseOffsetY: CGFloat = 16
+    private let minPanelSize = NSSize(width: 300, height: 400)
+    private let maxPanelSize = NSSize(width: 600, height: 800)
 
-    init() {
+    override init() {
+        fontSize = defaultFontSize
+        super.init()
         let storedSize = UserDefaults.standard.object(forKey: fontSizeDefaultsKey) as? Double
         let initialSize = CGFloat(storedSize ?? Double(defaultFontSize))
         fontSize = min(max(initialSize, minFontSize), maxFontSize)
@@ -586,8 +590,8 @@ final class FloatingPanelController {
         hostingView.translatesAutoresizingMaskIntoConstraints = false
 
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 200),
-            styleMask: [.titled, .closable, .fullSizeContentView],
+            contentRect: NSRect(x: 0, y: 0, width: 300, height: 400),
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
@@ -601,11 +605,23 @@ final class FloatingPanelController {
         panel.titlebarAppearsTransparent = true
         panel.standardWindowButton(.zoomButton)?.isHidden = true
         panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        panel.minSize = minPanelSize
+        panel.maxSize = maxPanelSize
+        panel.contentMinSize = minPanelSize
+        panel.contentMaxSize = maxPanelSize
+        panel.delegate = self
 
         panel.contentView = hostingView
         installKeyMonitorIfNeeded()
         self.panel = panel
         self.hostingView = hostingView
+    }
+
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        NSSize(
+            width: min(max(frameSize.width, minPanelSize.width), maxPanelSize.width),
+            height: min(max(frameSize.height, minPanelSize.height), maxPanelSize.height)
+        )
     }
 
     private func installKeyMonitorIfNeeded() {

@@ -7,7 +7,8 @@ Select text anywhere, then press your configured global hotkey (default: `Comman
 ## Features
 
 - Configurable global hotkey (default: `Command + Shift + F`, persisted locally)
-- Floating panel (draggable, closable, always on top, opens near mouse pointer)
+- Floating panel (draggable, closable, resizable, always on top, opens near mouse pointer)
+- Panel size limits: minimum `300 x 400`, maximum `600 x 800`
 - In-panel zoom: `Command + +` / `Command + -`, reset with `Command + 0` (default font size: `12`, persisted locally)
 - Status bar menu:
   - `Show Selected Text`
