@@ -8,6 +8,7 @@ Select text anywhere, then press `Command + Shift + F`.
 
 - Global hotkey: `Command + Shift + F`
 - Floating panel (draggable, closable, always on top)
+- In-panel zoom: `Command + +` / `Command + -`, reset with `Command + 0` (default font size: `12`, persisted locally)
 - Status bar menu:
   - `Show Selected Text`
   - `Debug Panel`
@@ -65,6 +66,8 @@ If permission is newly granted, quit and relaunch TextF.
 2. Select text in another app
 3. Press `Command + Shift + F`
 4. Selected text appears in the floating panel
+5. In the floating panel, use `Command + +` / `Command + -` to adjust font size
+6. Use `Command + 0` to reset font size to `12`
 
 You can also click the menu bar item `TextF` and choose `Show Selected Text`.
 

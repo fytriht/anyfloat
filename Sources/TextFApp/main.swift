@@ -198,20 +198,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 final class FloatingPanelController {
     private var panel: NSPanel?
     private var hostingView: NSHostingView<FloatingTextView>?
+    private var keyMonitor: Any?
+    private var currentText = ""
+    private var fontSize: CGFloat
+
+    private let defaultFontSize: CGFloat = 12
+    private let minFontSize: CGFloat = 8
+    private let maxFontSize: CGFloat = 36
+    private let fontSizeDefaultsKey = "floatingPanel.fontSize"
+
+    init() {
+        let storedSize = UserDefaults.standard.object(forKey: fontSizeDefaultsKey) as? Double
+        let initialSize = CGFloat(storedSize ?? Double(defaultFontSize))
+        fontSize = min(max(initialSize, minFontSize), maxFontSize)
+    }
+
+    deinit {
+        if let keyMonitor {
+            NSEvent.removeMonitor(keyMonitor)
+        }
+    }
 
     func show(text: String) {
+        currentText = text
         if panel == nil {
             createPanel()
         }
         guard let panel, let hostingView else { return }
 
-        hostingView.rootView = FloatingTextView(text: text)
+        hostingView.rootView = FloatingTextView(text: currentText, fontSize: fontSize)
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
     private func createPanel() {
-        let contentView = FloatingTextView(text: "")
+        let contentView = FloatingTextView(text: "", fontSize: fontSize)
         let hostingView = NSHostingView(rootView: contentView)
         hostingView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -231,21 +252,74 @@ final class FloatingPanelController {
         panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
 
         panel.contentView = hostingView
+        installKeyMonitorIfNeeded()
 
         self.panel = panel
         self.hostingView = hostingView
+    }
+
+    private func installKeyMonitorIfNeeded() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, let panel = self.panel, panel.isKeyWindow else {
+                return event
+            }
+
+            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            guard modifiers.contains(.command) else {
+                return event
+            }
+
+            switch event.keyCode {
+            case UInt16(kVK_ANSI_0), UInt16(kVK_ANSI_Keypad0):
+                self.resetFontSize()
+                return nil
+            case UInt16(kVK_ANSI_Minus), UInt16(kVK_ANSI_KeypadMinus):
+                self.adjustFontSize(by: -1)
+                return nil
+            case UInt16(kVK_ANSI_Equal), UInt16(kVK_ANSI_KeypadPlus):
+                self.adjustFontSize(by: 1)
+                return nil
+            default:
+                return event
+            }
+        }
+    }
+
+    private func adjustFontSize(by delta: CGFloat) {
+        guard let hostingView else { return }
+        let nextSize = min(max(fontSize + delta, minFontSize), maxFontSize)
+        guard nextSize != fontSize else { return }
+
+        fontSize = nextSize
+        persistFontSize()
+        hostingView.rootView = FloatingTextView(text: currentText, fontSize: fontSize)
+    }
+
+    private func resetFontSize() {
+        guard let hostingView else { return }
+        guard fontSize != defaultFontSize else { return }
+
+        fontSize = defaultFontSize
+        persistFontSize()
+        hostingView.rootView = FloatingTextView(text: currentText, fontSize: fontSize)
+    }
+
+    private func persistFontSize() {
+        UserDefaults.standard.set(Double(fontSize), forKey: fontSizeDefaultsKey)
     }
 }
 
 struct FloatingTextView: View {
     let text: String
+    let fontSize: CGFloat
 
     var body: some View {
         ZStack {
             Color(NSColor.windowBackgroundColor)
             ScrollView {
                 Text(text)
-                    .font(.system(size: 16, weight: .regular, design: .monospaced))
+                    .font(.system(size: fontSize, weight: .regular, design: .monospaced))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)
                     .textSelection(.enabled)
