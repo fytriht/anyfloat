@@ -26,19 +26,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         requestAccessibilityIfNeeded()
         seedLastExternalAppPID()
         observeFrontmostAppChanges()
-        registerHotKey()
         setupStatusItem()
+        scheduleHotKeyRegistration()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         unregisterHotKey()
     }
 
+    private func scheduleHotKeyRegistration() {
+        // Delay registration by one runloop turn so agent/status-bar setup is complete.
+        DispatchQueue.main.async { [weak self] in
+            self?.registerHotKey()
+        }
+    }
+
     private func registerHotKey() {
+        unregisterHotKey()
+
         // Command + Shift + F
         let keyCode: UInt32 = 3 // kVK_ANSI_F
         let modifiers: UInt32 = UInt32(cmdKey | shiftKey)
-        let target = GetApplicationEventTarget()
+        let target = GetEventDispatcherTarget()
 
         let hotKeyID = EventHotKeyID(signature: OSType(UInt32(truncatingIfNeeded: "TXTF".fourCharCodeValue)), id: 1)
         let status = RegisterEventHotKey(keyCode, modifiers, hotKeyID, target, 0, &hotKeyRef)
@@ -47,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        let handlerStatus = InstallEventHandler(target, { _, eventRef, userData in
+        let handlerStatus = InstallEventHandler(target, { _, _, userData in
             guard let userData else { return noErr }
             let appDelegate = Unmanaged<AppDelegate>.fromOpaque(userData).takeUnretainedValue()
             // Carbon hotkey callback may not run on the main thread. AX reads are more
@@ -69,6 +78,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let hotKeyHandlerRef {
             RemoveEventHandler(hotKeyHandlerRef)
         }
+        hotKeyRef = nil
+        hotKeyHandlerRef = nil
     }
 
     private func onHotKeyPressed() {
@@ -227,8 +238,10 @@ final class FloatingPanelController {
         guard let panel, let hostingView else { return }
 
         hostingView.rootView = FloatingTextView(text: currentText, fontSize: fontSize)
-        panel.makeKeyAndOrderFront(nil)
+        _ = NSRunningApplication.current.activate(options: [.activateIgnoringOtherApps])
         NSApp.activate(ignoringOtherApps: true)
+        panel.orderFrontRegardless()
+        panel.makeKeyAndOrderFront(nil)
     }
 
     private func createPanel() {
@@ -244,6 +257,8 @@ final class FloatingPanelController {
         )
         panel.isFloatingPanel = true
         panel.level = .floating
+        panel.hidesOnDeactivate = false
+        // .canJoinAllSpaces and .moveToActiveSpace are mutually exclusive.
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isMovableByWindowBackground = true
         panel.titleVisibility = .hidden
@@ -253,7 +268,6 @@ final class FloatingPanelController {
 
         panel.contentView = hostingView
         installKeyMonitorIfNeeded()
-
         self.panel = panel
         self.hostingView = hostingView
     }
