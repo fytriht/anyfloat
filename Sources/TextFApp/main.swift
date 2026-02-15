@@ -558,11 +558,19 @@ private final class FloatingBorderlessPanel: NSPanel {
     }
 }
 
+private final class FloatingTextContent: ObservableObject {
+    @Published var text: String
+
+    init(text: String) {
+        self.text = text
+    }
+}
+
 final class FloatingPanelController: NSObject, NSWindowDelegate {
     private struct PanelContext {
         let panel: NSPanel
         let hostingView: NSHostingView<FloatingTextView>
-        let text: String
+        let textContent: FloatingTextContent
         var fontSize: CGFloat
     }
 
@@ -607,10 +615,15 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         panel.orderFrontRegardless()
         panel.makeKeyAndOrderFront(nil)
+        // Keep the text area unfocused on open; user can click to start editing.
+        DispatchQueue.main.async { [weak panel] in
+            panel?.makeFirstResponder(nil)
+        }
     }
 
     private func createPanelContext(text: String, fontSize: CGFloat) -> PanelContext {
-        let contentView = makeFloatingTextView(text: text, fontSize: fontSize)
+        let textContent = FloatingTextContent(text: text)
+        let contentView = makeFloatingTextView(textContent: textContent, fontSize: fontSize)
         let hostingView = NSHostingView(rootView: contentView)
         hostingView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -637,7 +650,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
         panel.contentView = hostingView
         installKeyMonitorIfNeeded()
-        return PanelContext(panel: panel, hostingView: hostingView, text: text, fontSize: fontSize)
+        return PanelContext(panel: panel, hostingView: hostingView, textContent: textContent, fontSize: fontSize)
     }
 
     private func resetPanelSizeToDefault(_ panel: NSPanel, text: String, fontSize: CGFloat) {
@@ -673,8 +686,8 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         return textHeight + textVerticalPadding + textHeightSafetyInset
     }
 
-    private func makeFloatingTextView(text: String, fontSize: CGFloat) -> FloatingTextView {
-        FloatingTextView(text: text, fontSize: fontSize)
+    private func makeFloatingTextView(textContent: FloatingTextContent, fontSize: CGFloat) -> FloatingTextView {
+        FloatingTextView(textContent: textContent, fontSize: fontSize)
     }
 
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
@@ -734,7 +747,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         guard nextSize != context.fontSize else { return }
 
         context.fontSize = nextSize
-        context.hostingView.rootView = makeFloatingTextView(text: context.text, fontSize: nextSize)
+        context.hostingView.rootView = makeFloatingTextView(textContent: context.textContent, fontSize: nextSize)
         panelContexts[panelID] = context
         preferredFontSize = nextSize
         persistFontSize()
@@ -746,7 +759,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         guard context.fontSize != defaultFontSize else { return }
 
         context.fontSize = defaultFontSize
-        context.hostingView.rootView = makeFloatingTextView(text: context.text, fontSize: defaultFontSize)
+        context.hostingView.rootView = makeFloatingTextView(textContent: context.textContent, fontSize: defaultFontSize)
         panelContexts[panelID] = context
         preferredFontSize = defaultFontSize
         persistFontSize()
@@ -773,8 +786,8 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     }
 }
 
-struct FloatingTextView: View {
-    let text: String
+private struct FloatingTextView: View {
+    @ObservedObject var textContent: FloatingTextContent
     let fontSize: CGFloat
     private let cornerRadius: CGFloat = 12
     private let topBarHeight: CGFloat = 36
@@ -787,10 +800,8 @@ struct FloatingTextView: View {
             HStack(spacing: 0) {
                 WindowDragHandle()
                     .frame(width: edgeDragThickness)
-                ScrollView {
-                    contentText
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                contentEditor
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 WindowDragHandle()
                     .frame(width: edgeDragThickness)
             }
@@ -804,11 +815,11 @@ struct FloatingTextView: View {
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 
-    private var contentText: some View {
-        Text(text)
+    private var contentEditor: some View {
+        TextEditor(text: $textContent.text)
             .font(.system(size: fontSize, weight: .regular, design: .monospaced))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .textSelection(.enabled)
+            .scrollContentBackground(.hidden)
+            .background(Color.clear)
     }
 
     private var topBar: some View {
