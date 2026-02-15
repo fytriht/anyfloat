@@ -789,7 +789,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 private struct FloatingTextView: View {
     @ObservedObject var textContent: FloatingTextContent
     let fontSize: CGFloat
-    private let cornerRadius: CGFloat = 12
+    private let cornerRadius: CGFloat = 16
     private let topBarHeight: CGFloat = 36
     private let edgeDragThickness: CGFloat = 12
     private let bottomEdgeDragThickness: CGFloat = 16
@@ -802,8 +802,6 @@ private struct FloatingTextView: View {
                     .frame(width: edgeDragThickness)
                 contentEditor
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                WindowDragHandle()
-                    .frame(width: edgeDragThickness)
             }
             WindowDragHandle()
                 .frame(height: bottomEdgeDragThickness)
