@@ -543,6 +543,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+private final class FloatingBorderlessPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if modifiers == .command,
+           event.charactersIgnoringModifiers?.lowercased() == "w" {
+            close()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+}
+
 final class FloatingPanelController: NSObject, NSWindowDelegate {
     private struct PanelContext {
         let panel: NSPanel
@@ -599,22 +614,21 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         let hostingView = NSHostingView(rootView: contentView)
         hostingView.translatesAutoresizingMaskIntoConstraints = false
 
-        let panel = NSPanel(
+        let panel = FloatingBorderlessPanel(
             contentRect: NSRect(origin: .zero, size: defaultPanelSize),
-            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+            styleMask: [.borderless, .resizable],
             backing: .buffered,
             defer: false
         )
         panel.isFloatingPanel = true
         panel.level = .floating
         panel.hidesOnDeactivate = false
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
         // .canJoinAllSpaces and .moveToActiveSpace are mutually exclusive.
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.isMovableByWindowBackground = true
-        panel.titleVisibility = .hidden
-        panel.titlebarAppearsTransparent = true
-        panel.standardWindowButton(.zoomButton)?.isHidden = true
-        panel.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        panel.isMovableByWindowBackground = false
         panel.minSize = minPanelSize
         panel.maxSize = maxPanelSize
         panel.contentMinSize = minPanelSize
@@ -691,6 +705,12 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
                 return event
             }
 
+            if modifiers == .command,
+               event.charactersIgnoringModifiers?.lowercased() == "w" {
+                panel.close()
+                return nil
+            }
+
             switch event.keyCode {
             case UInt16(kVK_ANSI_0), UInt16(kVK_ANSI_Keypad0):
                 self.resetFontSize(for: panel)
@@ -756,24 +776,112 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 struct FloatingTextView: View {
     let text: String
     let fontSize: CGFloat
+    private let cornerRadius: CGFloat = 12
+    private let topBarHeight: CGFloat = 36
+    private let edgeDragThickness: CGFloat = 12
+    private let bottomEdgeDragThickness: CGFloat = 16
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            Color(NSColor.windowBackgroundColor)
-            ScrollView {
-                contentText
-            }
+        VStack(spacing: 0) {
+            topBar
+            HStack(spacing: 0) {
+                WindowDragHandle()
+                    .frame(width: edgeDragThickness)
+                ScrollView {
+                    contentText
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                WindowDragHandle()
+                    .frame(width: edgeDragThickness)
+            }
+            WindowDragHandle()
+                .frame(height: bottomEdgeDragThickness)
         }
+        .background(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(Color(NSColor.windowBackgroundColor))
+        )
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 
     private var contentText: some View {
         Text(text)
             .font(.system(size: fontSize, weight: .regular, design: .monospaced))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 16)
             .textSelection(.enabled)
+    }
+
+    private var topBar: some View {
+        ZStack(alignment: .leading) {
+            WindowDragHandle()
+            HStack {
+                DrawnCloseButton {
+                    NSApp.keyWindow?.close()
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+        }
+        .frame(height: topBarHeight)
+    }
+}
+
+private struct WindowDragHandle: NSViewRepresentable {
+    func makeNSView(context: Context) -> DragHandleView {
+        DragHandleView()
+    }
+
+    func updateNSView(_ nsView: DragHandleView, context: Context) {}
+
+    final class DragHandleView: NSView {
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            wantsLayer = true
+            layer?.backgroundColor = NSColor.clear.cgColor
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            window?.performDrag(with: event)
+        }
+    }
+}
+
+private struct DrawnCloseButton: View {
+    private let size: CGFloat = 14
+    private let iconSize: CGFloat = 5
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(Color(NSColor(calibratedWhite: 0.45, alpha: 1)))
+                DrawnXMark()
+                    .stroke(Color.white.opacity(0.95), style: StrokeStyle(lineWidth: 1, lineCap: .round))
+                    .frame(width: iconSize, height: iconSize)
+            }
+            .frame(width: size, height: size)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Close panel")
+    }
+}
+
+private struct DrawnXMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let half = min(rect.width, rect.height) * 0.46
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        path.move(to: CGPoint(x: center.x - half, y: center.y - half))
+        path.addLine(to: CGPoint(x: center.x + half, y: center.y + half))
+        path.move(to: CGPoint(x: center.x + half, y: center.y - half))
+        path.addLine(to: CGPoint(x: center.x - half, y: center.y + half))
+        return path
     }
 }
 
