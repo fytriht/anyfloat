@@ -561,9 +561,12 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     private let fontSizeDefaultsKey = "floatingPanel.fontSize"
     private let mouseOffsetX: CGFloat = 16
     private let mouseOffsetY: CGFloat = 16
-    private let minPanelSize = NSSize(width: 300, height: 400)
+    private let minPanelSize = NSSize(width: 300, height: 120)
     private let maxPanelSize = NSSize(width: 600, height: 800)
     private let defaultPanelSize = NSSize(width: 300, height: 400)
+    private let textHorizontalPadding: CGFloat = 32
+    private let textVerticalPadding: CGFloat = 16
+    private let textHeightSafetyInset: CGFloat = 36
 
     override init() {
         preferredFontSize = defaultFontSize
@@ -583,7 +586,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         let context = createPanelContext(text: text, fontSize: preferredFontSize)
         let panel = context.panel
         panelContexts[ObjectIdentifier(panel)] = context
-        resetPanelSizeToDefault(panel)
+        resetPanelSizeToDefault(panel, text: text, fontSize: preferredFontSize)
         positionPanelNearMouse(panel)
         _ = NSRunningApplication.current.activate(options: [.activateIgnoringOtherApps])
         NSApp.activate(ignoringOtherApps: true)
@@ -592,7 +595,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     }
 
     private func createPanelContext(text: String, fontSize: CGFloat) -> PanelContext {
-        let contentView = FloatingTextView(text: text, fontSize: fontSize)
+        let contentView = makeFloatingTextView(text: text, fontSize: fontSize)
         let hostingView = NSHostingView(rootView: contentView)
         hostingView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -623,11 +626,41 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         return PanelContext(panel: panel, hostingView: hostingView, text: text, fontSize: fontSize)
     }
 
-    private func resetPanelSizeToDefault(_ panel: NSPanel) {
+    private func resetPanelSizeToDefault(_ panel: NSPanel, text: String, fontSize: CGFloat) {
+        let defaultContentHeight = measuredPanelHeight(for: text, fontSize: fontSize)
+        let clampedContentHeight = min(max(defaultContentHeight, minPanelSize.height), maxPanelSize.height)
+        let targetContentSize = NSSize(width: defaultPanelSize.width, height: clampedContentHeight)
+        let targetFrameSize = panel.frameRect(forContentRect: NSRect(origin: .zero, size: targetContentSize)).size
         panel.setFrame(
-            NSRect(origin: panel.frame.origin, size: defaultPanelSize),
+            NSRect(
+                origin: panel.frame.origin,
+                size: targetFrameSize
+            ),
             display: true
         )
+    }
+
+    private func measuredPanelHeight(for text: String, fontSize: CGFloat) -> CGFloat {
+        let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        let textWidth = max(defaultPanelSize.width - textHorizontalPadding, 1)
+        let constraintRect = NSRect(
+            x: 0,
+            y: 0,
+            width: textWidth,
+            height: .greatestFiniteMagnitude
+        )
+        let attributes: [NSAttributedString.Key: Any] = [.font: font]
+        let textBoundingRect = (text as NSString).boundingRect(
+            with: constraintRect.size,
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: attributes
+        )
+        let textHeight = ceil(textBoundingRect.height)
+        return textHeight + textVerticalPadding + textHeightSafetyInset
+    }
+
+    private func makeFloatingTextView(text: String, fontSize: CGFloat) -> FloatingTextView {
+        FloatingTextView(text: text, fontSize: fontSize)
     }
 
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
@@ -681,7 +714,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         guard nextSize != context.fontSize else { return }
 
         context.fontSize = nextSize
-        context.hostingView.rootView = FloatingTextView(text: context.text, fontSize: nextSize)
+        context.hostingView.rootView = makeFloatingTextView(text: context.text, fontSize: nextSize)
         panelContexts[panelID] = context
         preferredFontSize = nextSize
         persistFontSize()
@@ -693,7 +726,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         guard context.fontSize != defaultFontSize else { return }
 
         context.fontSize = defaultFontSize
-        context.hostingView.rootView = FloatingTextView(text: context.text, fontSize: defaultFontSize)
+        context.hostingView.rootView = makeFloatingTextView(text: context.text, fontSize: defaultFontSize)
         panelContexts[panelID] = context
         preferredFontSize = defaultFontSize
         persistFontSize()
@@ -725,16 +758,22 @@ struct FloatingTextView: View {
     let fontSize: CGFloat
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .topLeading) {
             Color(NSColor.windowBackgroundColor)
             ScrollView {
-                Text(text)
-                    .font(.system(size: fontSize, weight: .regular, design: .monospaced))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                    .textSelection(.enabled)
+                contentText
             }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+    }
+
+    private var contentText: some View {
+        Text(text)
+            .font(.system(size: fontSize, weight: .regular, design: .monospaced))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
+            .textSelection(.enabled)
     }
 }
 
