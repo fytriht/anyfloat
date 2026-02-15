@@ -858,6 +858,7 @@ private struct WindowDragHandle: NSViewRepresentable {
 private struct DrawnCloseButton: View {
     private let size: CGFloat = 14
     private let iconSize: CGFloat = 5
+    @State private var isHovered = false
     let action: () -> Void
 
     var body: some View {
@@ -868,10 +869,14 @@ private struct DrawnCloseButton: View {
                 DrawnXMark()
                     .stroke(Color.white.opacity(0.95), style: StrokeStyle(lineWidth: 1, lineCap: .round))
                     .frame(width: iconSize, height: iconSize)
+                    .opacity(isHovered ? 1 : 0)
             }
             .frame(width: size, height: size)
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
         .accessibilityLabel("Close panel")
     }
 }
