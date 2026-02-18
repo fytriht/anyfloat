@@ -393,8 +393,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func onHotKeyPressed() {
         guard !isConfiguringHotKey else { return }
         refreshLastExternalAppPIDFromCurrentFrontmost()
-        let text = SelectedTextReader.readSelectedText(preferredAppPID: lastExternalAppPID) ?? "(No selected text)"
-        panelController.show(text: text)
+        let selectedText = SelectedTextReader.readSelectedText(preferredAppPID: lastExternalAppPID)
+        let text = selectedText ?? ""
+        panelController.show(text: text, keepUnfocusedOnOpen: selectedText != nil)
     }
 
     private func setupStatusItem() {
@@ -605,7 +606,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    func show(text: String) {
+    func show(text: String, keepUnfocusedOnOpen: Bool) {
         let context = createPanelContext(text: text, fontSize: preferredFontSize)
         let panel = context.panel
         panelContexts[ObjectIdentifier(panel)] = context
@@ -615,7 +616,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         panel.orderFrontRegardless()
         panel.makeKeyAndOrderFront(nil)
-        // Keep the text area unfocused on open; user can click to start editing.
+        guard keepUnfocusedOnOpen else { return }
         DispatchQueue.main.async { [weak panel] in
             panel?.makeFirstResponder(nil)
         }
@@ -784,6 +785,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
         panel.setFrameOrigin(NSPoint(x: originX, y: originY))
     }
+
 }
 
 private struct FloatingTextView: View {

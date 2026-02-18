@@ -71,20 +71,17 @@ If permission is newly granted, quit and relaunch TextF.
 3. Press your configured global hotkey (default: `Command + Shift + F`)
 4. Selected text appears in a new floating panel (you can trigger repeatedly to open multiple windows)
 5. You can edit the captured text directly inside the floating panel
-6. In the floating panel, use `Command + +` / `Command + -` to adjust font size
-7. Use `Command + 0` to reset font size to `12`
-8. Drag the panel from any non-text area around the content (top/left/right/bottom edges)
-9. Close the panel with `Command + W` or the top-left close button
+6. If no text is selected, an empty editor opens for immediate typing; if text is captured, the panel keeps the editor unfocused on open
+7. In the floating panel, use `Command + +` / `Command + -` to adjust font size
+8. Use `Command + 0` to reset font size to `12`
+9. Drag the panel from any non-text area around the content (top/left/right/bottom edges)
+10. Close the panel with `Command + W` or the top-left close button
 
 You can also click the menu bar item `TextF` and choose `Show Selected Text`.
 To change the global hotkey, open `TextF` -> `Set Hotkey (...)`; settings are saved in local `UserDefaults`.
 
 ## Troubleshooting
 
-- `No selected text` appears:
-  - Confirm Accessibility permission is enabled
-  - Confirm target app/window is focused
-  - Re-select text and trigger hotkey again
 - Hotkey does not trigger:
   - Check for shortcut conflicts with other tools
   - Relaunch TextF
