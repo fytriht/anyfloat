@@ -8,9 +8,16 @@ struct TextFApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        // We manage windows manually, so keep an empty Settings scene.
         Settings {
             EmptyView()
+        }
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Preferences...") {
+                    appDelegate.openPreferencesWindow()
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
         }
     }
 }
@@ -25,11 +32,6 @@ private final class HotKeyRecorderContainerView: NSView {
         window?.makeFirstResponder(nil)
         super.mouseDown(with: event)
     }
-}
-
-private enum HotKeySettingsResult {
-    case save(HotKeyConfiguration)
-    case cancel
 }
 
 private final class HotKeyRecorderView: NSControl {
@@ -124,90 +126,136 @@ private final class HotKeyRecorderView: NSControl {
     }
 }
 
-private final class HotKeySettingsPanelController: NSObject, NSWindowDelegate {
-    private let panel: NSPanel
+private final class PreferencesWindowController: NSObject, NSWindowDelegate {
+    private let window: NSWindow
     private let recorder: HotKeyRecorderView
+    private let launchAtLoginCheckbox: NSButton
+    private let onHotKeyChanged: (HotKeyConfiguration) -> Void
+    private let onLaunchAtLoginChanged: (Bool) -> Bool
+    private let onWindowClosed: () -> Void
 
-    init(configuration: HotKeyConfiguration) {
-        panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 430, height: 170),
+    init(
+        hotKeyConfiguration: HotKeyConfiguration,
+        launchAtLoginEnabled: Bool,
+        onHotKeyChanged: @escaping (HotKeyConfiguration) -> Void,
+        onLaunchAtLoginChanged: @escaping (Bool) -> Bool,
+        onWindowClosed: @escaping () -> Void
+    ) {
+        window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 460, height: 220),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
         recorder = HotKeyRecorderView(
-            configuration: configuration,
-            frame: NSRect(x: 20, y: 78, width: 300, height: 32)
+            configuration: hotKeyConfiguration,
+            frame: NSRect(x: 0, y: 0, width: 320, height: 32)
         )
+        launchAtLoginCheckbox = NSButton(checkboxWithTitle: "Launch at Login", target: nil, action: nil)
+        self.onHotKeyChanged = onHotKeyChanged
+        self.onLaunchAtLoginChanged = onLaunchAtLoginChanged
+        self.onWindowClosed = onWindowClosed
         super.init()
-        configurePanel()
+        configureWindow(launchAtLoginEnabled: launchAtLoginEnabled)
     }
 
-    func runModal() -> HotKeySettingsResult {
+    func show() {
         NSApp.activate(ignoringOtherApps: true)
-        panel.center()
-        panel.makeKeyAndOrderFront(nil)
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+    }
 
-        let response = NSApp.runModal(for: panel)
-        panel.orderOut(nil)
-
-        switch response {
-        case .OK:
-            return .save(recorder.recordedConfiguration)
-        default:
-            return .cancel
-        }
+    func refresh(hotKeyConfiguration: HotKeyConfiguration, launchAtLoginEnabled: Bool) {
+        recorder.setRecordedConfiguration(hotKeyConfiguration)
+        launchAtLoginCheckbox.state = launchAtLoginEnabled ? .on : .off
     }
 
     func windowWillClose(_ notification: Notification) {
-        guard NSApp.modalWindow === panel else { return }
-        NSApp.stopModal(withCode: .cancel)
+        onWindowClosed()
     }
 
-    private func configurePanel() {
-        panel.title = "Set Global Hotkey"
-        panel.isFloatingPanel = true
-        panel.level = .modalPanel
-        panel.isReleasedWhenClosed = false
-        panel.delegate = self
+    private func configureWindow(launchAtLoginEnabled: Bool) {
+        window.title = "Preferences"
+        window.isReleasedWhenClosed = false
+        window.delegate = self
 
-        let contentView = HotKeyRecorderContainerView(frame: NSRect(x: 0, y: 0, width: 430, height: 170))
-        contentView.wantsLayer = true
-        panel.contentView = contentView
+        let contentView = HotKeyRecorderContainerView(frame: NSRect(x: 0, y: 0, width: 460, height: 220))
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        window.contentView = contentView
 
-        let helpLabel = NSTextField(labelWithString: "Click the field and press your shortcut.")
-        helpLabel.textColor = .secondaryLabelColor
-        helpLabel.frame = NSRect(x: 20, y: 126, width: 320, height: 18)
-        contentView.addSubview(helpLabel)
+        let hotKeyLabel = NSTextField(labelWithString: "Global Hotkey")
+        hotKeyLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        hotKeyLabel.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(hotKeyLabel)
 
+        let hotKeyHelpLabel = NSTextField(labelWithString: "Click the field and press your shortcut. Changes are saved immediately.")
+        hotKeyHelpLabel.textColor = .secondaryLabelColor
+        hotKeyHelpLabel.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(hotKeyHelpLabel)
+
+        recorder.translatesAutoresizingMaskIntoConstraints = false
+        recorder.target = self
+        recorder.action = #selector(handleHotKeyChanged)
         contentView.addSubview(recorder)
 
-        let saveButton = NSButton(title: "Save", target: self, action: #selector(handleSave))
-        saveButton.frame = NSRect(x: 330, y: 14, width: 82, height: 30)
-        saveButton.keyEquivalent = "\r"
-        contentView.addSubview(saveButton)
+        let resetHotKeyButton = NSButton(title: "Reset Default", target: self, action: #selector(handleResetDefaultHotKey))
+        resetHotKeyButton.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(resetHotKeyButton)
 
-        let cancelButton = NSButton(title: "Cancel", target: self, action: #selector(handleCancel))
-        cancelButton.frame = NSRect(x: 240, y: 14, width: 82, height: 30)
-        cancelButton.keyEquivalent = "\u{1b}"
-        contentView.addSubview(cancelButton)
+        let separator = NSBox()
+        separator.boxType = .separator
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(separator)
 
-        let resetButton = NSButton(title: "Reset Default", target: self, action: #selector(handleResetDefault))
-        resetButton.frame = NSRect(x: 20, y: 14, width: 120, height: 30)
-        contentView.addSubview(resetButton)
+        launchAtLoginCheckbox.target = self
+        launchAtLoginCheckbox.action = #selector(handleToggleLaunchAtLogin)
+        launchAtLoginCheckbox.state = launchAtLoginEnabled ? .on : .off
+        launchAtLoginCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(launchAtLoginCheckbox)
+
+        NSLayoutConstraint.activate([
+            hotKeyLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 20),
+            hotKeyLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+
+            hotKeyHelpLabel.topAnchor.constraint(equalTo: hotKeyLabel.bottomAnchor, constant: 8),
+            hotKeyHelpLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            hotKeyHelpLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+
+            recorder.topAnchor.constraint(equalTo: hotKeyHelpLabel.bottomAnchor, constant: 10),
+            recorder.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            recorder.widthAnchor.constraint(equalToConstant: 320),
+            recorder.heightAnchor.constraint(equalToConstant: 32),
+
+            resetHotKeyButton.centerYAnchor.constraint(equalTo: recorder.centerYAnchor),
+            resetHotKeyButton.leadingAnchor.constraint(equalTo: recorder.trailingAnchor, constant: 12),
+            resetHotKeyButton.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -20),
+
+            separator.topAnchor.constraint(equalTo: recorder.bottomAnchor, constant: 22),
+            separator.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            separator.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+
+            launchAtLoginCheckbox.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 16),
+            launchAtLoginCheckbox.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            launchAtLoginCheckbox.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -20)
+        ])
     }
 
-    @objc private func handleSave() {
-        NSApp.stopModal(withCode: .OK)
+    @objc private func handleHotKeyChanged() {
+        onHotKeyChanged(recorder.recordedConfiguration)
     }
 
-    @objc private func handleCancel() {
-        NSApp.stopModal(withCode: .cancel)
-    }
-
-    @objc private func handleResetDefault() {
+    @objc private func handleResetDefaultHotKey() {
         recorder.setRecordedConfiguration(HotKeyConfiguration.defaultValue)
-        panel.makeFirstResponder(recorder)
+        onHotKeyChanged(HotKeyConfiguration.defaultValue)
+        window.makeFirstResponder(recorder)
+    }
+
+    @objc private func handleToggleLaunchAtLogin() {
+        let nextValue = launchAtLoginCheckbox.state == .on
+        let succeeded = onLaunchAtLoginChanged(nextValue)
+        if !succeeded {
+            launchAtLoginCheckbox.state = nextValue ? .off : .on
+        }
     }
 }
 
@@ -321,13 +369,12 @@ private struct HotKeyConfiguration: Codable {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKeyRef: EventHotKeyRef?
     private var hotKeyHandlerRef: EventHandlerRef?
     private let panelController = FloatingPanelController()
     private var statusItem: NSStatusItem?
-    private var configureHotKeyMenuItem: NSMenuItem?
-    private var launchAtLoginMenuItem: NSMenuItem?
+    private var preferencesWindowController: PreferencesWindowController?
     private var lastExternalAppPID: pid_t?
     private var hotKeyConfiguration = HotKeyConfiguration.loadFromDefaults()
     private var isConfiguringHotKey = false
@@ -396,6 +443,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func onHotKeyPressed() {
         guard !isConfiguringHotKey else { return }
+        showSelectedTextPanel()
+    }
+
+    private func showSelectedTextPanel() {
         refreshLastExternalAppPIDFromCurrentFrontmost()
         let selectedText = SelectedTextReader.readSelectedText(preferredAppPID: lastExternalAppPID)
         let text = selectedText ?? ""
@@ -409,72 +460,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         let menu = NSMenu()
-        menu.delegate = self
         menu.addItem(NSMenuItem(title: "Show Selected Text", action: #selector(handleShowSelectedText), keyEquivalent: ""))
-        let hotKeyItem = NSMenuItem(title: "", action: #selector(handleConfigureHotKey), keyEquivalent: "")
-        hotKeyItem.target = self
-        configureHotKeyMenuItem = hotKeyItem
-        menu.addItem(hotKeyItem)
-        let launchAtLoginItem = NSMenuItem(title: "Launch at Login", action: #selector(handleToggleLaunchAtLogin), keyEquivalent: "")
-        launchAtLoginItem.target = self
-        launchAtLoginItem.state = launchAtLoginPreference ? .on : .off
-        launchAtLoginMenuItem = launchAtLoginItem
-        menu.addItem(launchAtLoginItem)
-        menu.addItem(NSMenuItem(title: "Debug Panel", action: #selector(handleDebugPanel), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Preferences...", action: #selector(handleOpenPreferences), keyEquivalent: ","))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit TextF", action: #selector(handleQuit), keyEquivalent: "q"))
 
         menu.items.forEach { $0.target = self }
         item.menu = menu
         self.statusItem = item
-        refreshConfigureHotKeyMenuItemTitle()
-    }
-
-    func menuNeedsUpdate(_ menu: NSMenu) {
-        refreshLaunchAtLoginMenuItemState()
-    }
-
-    private func refreshConfigureHotKeyMenuItemTitle() {
-        configureHotKeyMenuItem?.title = "Set Hotkey"
     }
 
     @objc private func handleShowSelectedText() {
-        onHotKeyPressed()
+        showSelectedTextPanel()
     }
 
     @objc private func handleQuit() {
         NSApp.terminate(nil)
     }
 
-    @objc private func handleConfigureHotKey() {
-        let panelController = HotKeySettingsPanelController(configuration: hotKeyConfiguration)
-        isConfiguringHotKey = true
-        defer { isConfiguringHotKey = false }
-        switch panelController.runModal() {
-        case .save(let configuration):
-            applyHotKeyConfiguration(configuration)
-        case .cancel:
-            break
+    func openPreferencesWindow() {
+        if let preferencesWindowController {
+            preferencesWindowController.refresh(
+                hotKeyConfiguration: hotKeyConfiguration,
+                launchAtLoginEnabled: launchAtLoginPreference
+            )
+            isConfiguringHotKey = true
+            preferencesWindowController.show()
+            return
         }
+
+        let controller = PreferencesWindowController(
+            hotKeyConfiguration: hotKeyConfiguration,
+            launchAtLoginEnabled: launchAtLoginPreference,
+            onHotKeyChanged: { [weak self] configuration in
+                self?.applyHotKeyConfiguration(configuration)
+            },
+            onLaunchAtLoginChanged: { [weak self] enabled in
+                self?.applyLaunchAtLoginPreference(enabled) ?? false
+            },
+            onWindowClosed: { [weak self] in
+                guard let self else { return }
+                self.isConfiguringHotKey = false
+                self.preferencesWindowController = nil
+            }
+        )
+        preferencesWindowController = controller
+        isConfiguringHotKey = true
+        controller.show()
+    }
+
+    @objc private func handleOpenPreferences() {
+        openPreferencesWindow()
     }
 
     private func applyHotKeyConfiguration(_ configuration: HotKeyConfiguration) {
         hotKeyConfiguration = configuration
         hotKeyConfiguration.persistToDefaults()
-        refreshConfigureHotKeyMenuItemTitle()
         registerHotKey()
     }
 
-    @objc private func handleToggleLaunchAtLogin() {
-        let nextValue = !launchAtLoginPreference
-        UserDefaults.standard.set(nextValue, forKey: launchAtLoginDefaultsKey)
+    private func applyLaunchAtLoginPreference(_ enabled: Bool) -> Bool {
+        UserDefaults.standard.set(enabled, forKey: launchAtLoginDefaultsKey)
         do {
-            try setLaunchAtLoginEnabled(nextValue)
-            refreshLaunchAtLoginMenuItemState()
+            try setLaunchAtLoginEnabled(enabled)
+            return true
         } catch {
-            UserDefaults.standard.set(!nextValue, forKey: launchAtLoginDefaultsKey)
-            refreshLaunchAtLoginMenuItemState()
+            UserDefaults.standard.set(!enabled, forKey: launchAtLoginDefaultsKey)
             presentLaunchAtLoginError(error)
+            return false
         }
     }
 
@@ -493,7 +546,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } catch {
             NSLog("Failed to apply launch-at-login preference: \(error.localizedDescription)")
         }
-        refreshLaunchAtLoginMenuItemState()
     }
 
     private func setLaunchAtLoginEnabled(_ enabled: Bool) throws {
@@ -502,10 +554,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             try SMAppService.mainApp.unregister()
         }
-    }
-
-    private func refreshLaunchAtLoginMenuItemState() {
-        launchAtLoginMenuItem?.state = launchAtLoginPreference ? .on : .off
     }
 
     private func presentLaunchAtLoginError(_ error: Error) {
@@ -522,56 +570,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !trusted {
             NSLog("Accessibility permission not granted yet.")
         }
-    }
-
-    @objc private func handleDebugPanel() {
-        let trusted = AXIsProcessTrusted()
-        let bundleID = Bundle.main.bundleIdentifier ?? "unknown"
-        let executablePath = Bundle.main.executableURL?.path ?? "unknown"
-        let selfPID = ProcessInfo.processInfo.processIdentifier
-        let frontmost = NSWorkspace.shared.frontmostApplication
-        let frontmostName = frontmost?.localizedName ?? "unknown"
-        let frontmostPID = frontmost?.processIdentifier ?? -1
-        let frontmostBundleID = frontmost?.bundleIdentifier ?? "unknown"
-        let focusedAppPID = SelectedTextReader.debugFocusedApplicationPID()?.description ?? "nil"
-
-        var focusedStatus = "unknown"
-        let systemWide = AXUIElementCreateSystemWide()
-        var focused: AnyObject?
-        let err = AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focused)
-        if err == .success, let focused {
-            focusedStatus = "ok (typeId=\(CFGetTypeID(focused)))"
-        } else {
-            focusedStatus = "error \(err.rawValue)"
-        }
-
-        let message = """
-        [App]
-        Bundle ID: \(bundleID)
-        Executable: \(executablePath)
-        Self PID: \(selfPID)
-        Hotkey: \(hotKeyConfiguration.displayLabel)
-
-        [Permissions / AX]
-        AX Trusted: \(trusted)
-        Focused Element: \(focusedStatus)
-        Focused App PID (AX): \(focusedAppPID)
-
-        [Frontmost App]
-        Name: \(frontmostName)
-        PID: \(frontmostPID)
-        Bundle ID: \(frontmostBundleID)
-        Last External PID: \(lastExternalAppPID?.description ?? "nil")
-
-        [SelectedTextReader]
-        \(SelectedTextReader.debugSnapshot(preferredAppPID: lastExternalAppPID))
-        """
-
-        let alert = NSAlert()
-        alert.messageText = "TextF Debug Panel"
-        alert.informativeText = message
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
     }
 
     private func seedLastExternalAppPID() {
@@ -1136,34 +1134,6 @@ enum SelectedTextReader {
         return nil
     }
 
-    static func debugFocusedApplicationPID() -> pid_t? {
-        focusedApplicationPID()
-    }
-
-    static func debugSnapshot(preferredAppPID: pid_t?) -> String {
-        var lines: [String] = []
-        lines.append("AX Timeout: \(axTimeout)s")
-        lines.append("Max Retries: \(maxRetries)")
-        lines.append("Retry Delay: \(retryDelayMicroseconds)us")
-
-        let focusedPID = focusedApplicationPID()
-        lines.append("Focused PID Probe: \(focusedPID?.description ?? "nil")")
-
-        let focusedResult = focusedPID.flatMap { selectedText(fromAppPID: $0) }
-        lines.append("Focused App Text: \(textSummary(focusedResult))")
-
-        let preferredResult = preferredAppPID.flatMap { selectedText(fromAppPID: $0) }
-        lines.append("Preferred App Text: \(textSummary(preferredResult))")
-
-        let systemWide = AXUIElementCreateSystemWide()
-        AXUIElementSetMessagingTimeout(systemWide, axTimeout)
-        let systemWideResult = focusedElement(from: systemWide).flatMap { selectedText(from: $0) }
-        lines.append("System-Wide Focused Element Text: \(textSummary(systemWideResult))")
-
-        lines.append("Pasteboard Fallback: enabled (not executed in panel)")
-        return lines.joined(separator: "\n")
-    }
-
     private static func selectedText(fromAppPID pid: pid_t) -> String? {
         guard NSRunningApplication(processIdentifier: pid) != nil else { return nil }
         let appElement = AXUIElementCreateApplication(pid)
@@ -1296,15 +1266,6 @@ enum SelectedTextReader {
         guard cfRange.location <= nsText.length, upperBound <= nsText.length else { return nil }
         let nsRange = NSRange(location: cfRange.location, length: cfRange.length)
         return nsText.substring(with: nsRange)
-    }
-
-    private static func textSummary(_ text: String?) -> String {
-        guard let text else { return "nil" }
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "empty" }
-        let preview = String(trimmed.prefix(120))
-        let suffix = trimmed.count > 120 ? "..." : ""
-        return "len=\(trimmed.count), preview=\"\(preview)\(suffix)\""
     }
 
     private struct PasteboardSnapshot {

@@ -7,7 +7,7 @@ Select text anywhere, then press your configured global hotkey (default: `Comman
 ## Features
 
 - Configurable global hotkey (default: `Command + Shift + F`, persisted locally)
-- Launch at login (enabled by default, configurable from status bar menu)
+- Launch at login (enabled by default, configurable from Preferences)
 - Floating panel (borderless, draggable around the text area edges, top-left custom close button, closable with `Command + W`, resizable, always on top, opens near mouse pointer)
 - Multiple floating panels: each hotkey trigger opens a new window
 - Editable text area inside each floating panel (window height auto-adjusts to keep content visible while typing; once you manually resize a panel, that panel keeps manual size)
@@ -15,9 +15,7 @@ Select text anywhere, then press your configured global hotkey (default: `Comman
 - In-panel zoom: `Command + +` / `Command + -`, reset with `Command + 0` (default font size: `12`, persisted locally)
 - Status bar menu:
   - `Show Selected Text`
-  - `Set Hotkey`
-  - `Launch at Login` (checked by default)
-  - `Debug Panel`
+  - `Preferences...` (hotkey + launch at login)
   - `Quit TextF`
 - Multi-strategy text extraction for better compatibility:
   - Accessibility selected-text APIs
@@ -81,8 +79,8 @@ If permission is newly granted, quit and relaunch TextF.
 11. Close the panel with `Command + W` or the top-left close button
 
 You can also click the menu bar item `TextF` and choose `Show Selected Text`.
-To change the global hotkey, open `TextF` -> `Set Hotkey (...)`; settings are saved in local `UserDefaults`.
-To control startup behavior, toggle `TextF` -> `Launch at Login` (enabled by default).
+To change the global hotkey or startup behavior, open `TextF` -> `Preferences...` (or press `Command + ,`).
+Both settings are saved in local `UserDefaults`.
 
 ## Troubleshooting
 
@@ -90,7 +88,7 @@ To control startup behavior, toggle `TextF` -> `Launch at Login` (enabled by def
   - Check for shortcut conflicts with other tools
   - Relaunch TextF
 - Some apps still fail:
-  - Open `TextF` -> `Debug Panel` to inspect AX/focus state
+  - Confirm Accessibility permission is granted to `TextFApp`
 
 ## Project Layout
 
