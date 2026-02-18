@@ -7,6 +7,7 @@ Select text anywhere, then press your configured global hotkey (default: `Comman
 ## Features
 
 - Configurable global hotkey (default: `Command + Shift + F`, persisted locally)
+- Launch at login (enabled by default, configurable from status bar menu)
 - Floating panel (borderless, draggable around the text area edges, top-left custom close button, closable with `Command + W`, resizable, always on top, opens near mouse pointer)
 - Multiple floating panels: each hotkey trigger opens a new window
 - Editable text area inside each floating panel (window height auto-adjusts to keep content visible while typing; once you manually resize a panel, that panel keeps manual size)
@@ -15,6 +16,7 @@ Select text anywhere, then press your configured global hotkey (default: `Comman
 - Status bar menu:
   - `Show Selected Text`
   - `Set Hotkey`
+  - `Launch at Login` (checked by default)
   - `Debug Panel`
   - `Quit TextF`
 - Multi-strategy text extraction for better compatibility:
@@ -80,6 +82,7 @@ If permission is newly granted, quit and relaunch TextF.
 
 You can also click the menu bar item `TextF` and choose `Show Selected Text`.
 To change the global hotkey, open `TextF` -> `Set Hotkey (...)`; settings are saved in local `UserDefaults`.
+To control startup behavior, toggle `TextF` -> `Launch at Login` (enabled by default).
 
 ## Troubleshooting
 

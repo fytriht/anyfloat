@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Carbon
+import ServiceManagement
 
 @main
 struct TextFApp: App {
@@ -320,15 +321,17 @@ private struct HotKeyConfiguration: Codable {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var hotKeyRef: EventHotKeyRef?
     private var hotKeyHandlerRef: EventHandlerRef?
     private let panelController = FloatingPanelController()
     private var statusItem: NSStatusItem?
     private var configureHotKeyMenuItem: NSMenuItem?
+    private var launchAtLoginMenuItem: NSMenuItem?
     private var lastExternalAppPID: pid_t?
     private var hotKeyConfiguration = HotKeyConfiguration.loadFromDefaults()
     private var isConfiguringHotKey = false
+    private let launchAtLoginDefaultsKey = "app.launchAtLoginEnabled"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -336,6 +339,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         seedLastExternalAppPID()
         observeFrontmostAppChanges()
         setupStatusItem()
+        applyLaunchAtLoginPreferenceOnLaunch()
         scheduleHotKeyRegistration()
     }
 
@@ -405,11 +409,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let menu = NSMenu()
+        menu.delegate = self
         menu.addItem(NSMenuItem(title: "Show Selected Text", action: #selector(handleShowSelectedText), keyEquivalent: ""))
         let hotKeyItem = NSMenuItem(title: "", action: #selector(handleConfigureHotKey), keyEquivalent: "")
         hotKeyItem.target = self
         configureHotKeyMenuItem = hotKeyItem
         menu.addItem(hotKeyItem)
+        let launchAtLoginItem = NSMenuItem(title: "Launch at Login", action: #selector(handleToggleLaunchAtLogin), keyEquivalent: "")
+        launchAtLoginItem.target = self
+        launchAtLoginItem.state = launchAtLoginPreference ? .on : .off
+        launchAtLoginMenuItem = launchAtLoginItem
+        menu.addItem(launchAtLoginItem)
         menu.addItem(NSMenuItem(title: "Debug Panel", action: #selector(handleDebugPanel), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit TextF", action: #selector(handleQuit), keyEquivalent: "q"))
@@ -418,6 +428,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.menu = menu
         self.statusItem = item
         refreshConfigureHotKeyMenuItemTitle()
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        refreshLaunchAtLoginMenuItemState()
     }
 
     private func refreshConfigureHotKeyMenuItemTitle() {
@@ -449,6 +463,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKeyConfiguration.persistToDefaults()
         refreshConfigureHotKeyMenuItemTitle()
         registerHotKey()
+    }
+
+    @objc private func handleToggleLaunchAtLogin() {
+        let nextValue = !launchAtLoginPreference
+        UserDefaults.standard.set(nextValue, forKey: launchAtLoginDefaultsKey)
+        do {
+            try setLaunchAtLoginEnabled(nextValue)
+            refreshLaunchAtLoginMenuItemState()
+        } catch {
+            UserDefaults.standard.set(!nextValue, forKey: launchAtLoginDefaultsKey)
+            refreshLaunchAtLoginMenuItemState()
+            presentLaunchAtLoginError(error)
+        }
+    }
+
+    private var launchAtLoginPreference: Bool {
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: launchAtLoginDefaultsKey) == nil {
+            defaults.set(true, forKey: launchAtLoginDefaultsKey)
+            return true
+        }
+        return defaults.bool(forKey: launchAtLoginDefaultsKey)
+    }
+
+    private func applyLaunchAtLoginPreferenceOnLaunch() {
+        do {
+            try setLaunchAtLoginEnabled(launchAtLoginPreference)
+        } catch {
+            NSLog("Failed to apply launch-at-login preference: \(error.localizedDescription)")
+        }
+        refreshLaunchAtLoginMenuItemState()
+    }
+
+    private func setLaunchAtLoginEnabled(_ enabled: Bool) throws {
+        if enabled {
+            try SMAppService.mainApp.register()
+        } else {
+            try SMAppService.mainApp.unregister()
+        }
+    }
+
+    private func refreshLaunchAtLoginMenuItemState() {
+        launchAtLoginMenuItem?.state = launchAtLoginPreference ? .on : .off
+    }
+
+    private func presentLaunchAtLoginError(_ error: Error) {
+        let alert = NSAlert()
+        alert.messageText = "Unable to Update Launch at Login"
+        alert.informativeText = error.localizedDescription
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     private func requestAccessibilityIfNeeded() {
