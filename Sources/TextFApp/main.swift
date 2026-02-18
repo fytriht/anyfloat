@@ -573,6 +573,8 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         let hostingView: NSHostingView<FloatingTextView>
         let textContent: FloatingTextContent
         var fontSize: CGFloat
+        var lastContentWidth: CGFloat
+        var isAutoHeightEnabled: Bool
     }
 
     private var panelContexts: [ObjectIdentifier: PanelContext] = [:]
@@ -624,9 +626,6 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
     private func createPanelContext(text: String, fontSize: CGFloat) -> PanelContext {
         let textContent = FloatingTextContent(text: text)
-        let contentView = makeFloatingTextView(textContent: textContent, fontSize: fontSize)
-        let hostingView = NSHostingView(rootView: contentView)
-        hostingView.translatesAutoresizingMaskIntoConstraints = false
 
         let panel = FloatingBorderlessPanel(
             contentRect: NSRect(origin: .zero, size: defaultPanelSize),
@@ -649,14 +648,23 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         panel.contentMaxSize = maxPanelSize
         panel.delegate = self
 
+        let contentView = makeFloatingTextView(panel: panel, textContent: textContent, fontSize: fontSize)
+        let hostingView = NSHostingView(rootView: contentView)
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
         panel.contentView = hostingView
         installKeyMonitorIfNeeded()
-        return PanelContext(panel: panel, hostingView: hostingView, textContent: textContent, fontSize: fontSize)
+        return PanelContext(
+            panel: panel,
+            hostingView: hostingView,
+            textContent: textContent,
+            fontSize: fontSize,
+            lastContentWidth: defaultPanelSize.width,
+            isAutoHeightEnabled: true
+        )
     }
 
     private func resetPanelSizeToDefault(_ panel: NSPanel, text: String, fontSize: CGFloat) {
-        let defaultContentHeight = measuredPanelHeight(for: text, fontSize: fontSize)
-        let clampedContentHeight = min(max(defaultContentHeight, minPanelSize.height), maxPanelSize.height)
+        let clampedContentHeight = clampedPanelHeight(for: text, fontSize: fontSize, contentWidth: defaultPanelSize.width)
         let targetContentSize = NSSize(width: defaultPanelSize.width, height: clampedContentHeight)
         let targetFrameSize = panel.frameRect(forContentRect: NSRect(origin: .zero, size: targetContentSize)).size
         panel.setFrame(
@@ -668,9 +676,14 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         )
     }
 
-    private func measuredPanelHeight(for text: String, fontSize: CGFloat) -> CGFloat {
+    private func clampedPanelHeight(for text: String, fontSize: CGFloat, contentWidth: CGFloat) -> CGFloat {
+        let measuredHeight = measuredPanelHeight(for: text, fontSize: fontSize, contentWidth: contentWidth)
+        return min(max(measuredHeight, minPanelSize.height), maxPanelSize.height)
+    }
+
+    private func measuredPanelHeight(for text: String, fontSize: CGFloat, contentWidth: CGFloat) -> CGFloat {
         let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
-        let textWidth = max(defaultPanelSize.width - textHorizontalPadding, 1)
+        let textWidth = max(contentWidth - textHorizontalPadding, 1)
         let constraintRect = NSRect(
             x: 0,
             y: 0,
@@ -687,8 +700,76 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         return textHeight + textVerticalPadding + textHeightSafetyInset
     }
 
-    private func makeFloatingTextView(textContent: FloatingTextContent, fontSize: CGFloat) -> FloatingTextView {
-        FloatingTextView(textContent: textContent, fontSize: fontSize)
+    private func resizePanelHeightToFitText(_ panel: NSPanel, text: String, fontSize: CGFloat) {
+        let currentContentRect = panel.contentRect(forFrameRect: panel.frame)
+        let targetContentHeight = clampedPanelHeight(
+            for: text,
+            fontSize: fontSize,
+            contentWidth: currentContentRect.width
+        )
+        guard abs(targetContentHeight - currentContentRect.height) > 0.5 else { return }
+
+        let targetContentRect = NSRect(
+            x: 0,
+            y: 0,
+            width: currentContentRect.width,
+            height: targetContentHeight
+        )
+        let targetFrameSize = panel.frameRect(forContentRect: targetContentRect).size
+        var targetFrame = panel.frame
+        let heightDelta = targetFrameSize.height - targetFrame.height
+        targetFrame.size.height = targetFrameSize.height
+        targetFrame.origin.y -= heightDelta
+        targetFrame = constrainedFrameToVisibleArea(targetFrame, for: panel)
+        panel.setFrame(targetFrame, display: true)
+    }
+
+    private func constrainedFrameToVisibleArea(_ frame: NSRect, for panel: NSPanel) -> NSRect {
+        let visibleFrame = visibleFrameForPanel(panel)
+        guard !visibleFrame.isEmpty else { return frame }
+
+        var constrainedFrame = frame
+        let maxOriginX = visibleFrame.maxX - constrainedFrame.width
+        if maxOriginX >= visibleFrame.minX {
+            constrainedFrame.origin.x = min(max(constrainedFrame.origin.x, visibleFrame.minX), maxOriginX)
+        } else {
+            constrainedFrame.origin.x = visibleFrame.minX
+        }
+
+        let maxOriginY = visibleFrame.maxY - constrainedFrame.height
+        if maxOriginY >= visibleFrame.minY {
+            constrainedFrame.origin.y = min(max(constrainedFrame.origin.y, visibleFrame.minY), maxOriginY)
+        } else {
+            constrainedFrame.origin.y = visibleFrame.minY
+        }
+
+        return constrainedFrame
+    }
+
+    private func visibleFrameForPanel(_ panel: NSPanel) -> NSRect {
+        if let screen = panel.screen {
+            return screen.visibleFrame
+        }
+
+        let panelCenter = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
+        if let screenContainingPanel = NSScreen.screens.first(where: { $0.frame.contains(panelCenter) }) {
+            return screenContainingPanel.visibleFrame
+        }
+
+        return NSScreen.main?.visibleFrame ?? .zero
+    }
+
+    private func makeFloatingTextView(panel: NSPanel, textContent: FloatingTextContent, fontSize: CGFloat) -> FloatingTextView {
+        FloatingTextView(
+            textContent: textContent,
+            fontSize: fontSize,
+            onTextChange: { [weak self, weak panel] updatedText in
+                guard let self, let panel else { return }
+                let panelID = ObjectIdentifier(panel)
+                guard let context = self.panelContexts[panelID], context.isAutoHeightEnabled else { return }
+                self.resizePanelHeightToFitText(panel, text: updatedText, fontSize: context.fontSize)
+            }
+        )
     }
 
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
@@ -696,6 +777,31 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
             width: min(max(frameSize.width, minPanelSize.width), maxPanelSize.width),
             height: min(max(frameSize.height, minPanelSize.height), maxPanelSize.height)
         )
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        guard let panel = notification.object as? NSPanel else { return }
+        let panelID = ObjectIdentifier(panel)
+        guard var context = panelContexts[panelID] else { return }
+        guard context.isAutoHeightEnabled else { return }
+
+        let currentContentWidth = panel.contentRect(forFrameRect: panel.frame).width
+        guard abs(currentContentWidth - context.lastContentWidth) > 0.5 else { return }
+
+        context.lastContentWidth = currentContentWidth
+        panelContexts[panelID] = context
+        resizePanelHeightToFitText(panel, text: context.textContent.text, fontSize: context.fontSize)
+    }
+
+    func windowWillStartLiveResize(_ notification: Notification) {
+        guard let panel = notification.object as? NSPanel else { return }
+        let panelID = ObjectIdentifier(panel)
+        guard var context = panelContexts[panelID] else { return }
+        guard context.isAutoHeightEnabled else { return }
+
+        context.isAutoHeightEnabled = false
+        context.lastContentWidth = panel.contentRect(forFrameRect: panel.frame).width
+        panelContexts[panelID] = context
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -748,8 +854,11 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         guard nextSize != context.fontSize else { return }
 
         context.fontSize = nextSize
-        context.hostingView.rootView = makeFloatingTextView(textContent: context.textContent, fontSize: nextSize)
+        context.hostingView.rootView = makeFloatingTextView(panel: panel, textContent: context.textContent, fontSize: nextSize)
         panelContexts[panelID] = context
+        if context.isAutoHeightEnabled {
+            resizePanelHeightToFitText(panel, text: context.textContent.text, fontSize: nextSize)
+        }
         preferredFontSize = nextSize
         persistFontSize()
     }
@@ -760,8 +869,15 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         guard context.fontSize != defaultFontSize else { return }
 
         context.fontSize = defaultFontSize
-        context.hostingView.rootView = makeFloatingTextView(textContent: context.textContent, fontSize: defaultFontSize)
+        context.hostingView.rootView = makeFloatingTextView(
+            panel: panel,
+            textContent: context.textContent,
+            fontSize: defaultFontSize
+        )
         panelContexts[panelID] = context
+        if context.isAutoHeightEnabled {
+            resizePanelHeightToFitText(panel, text: context.textContent.text, fontSize: defaultFontSize)
+        }
         preferredFontSize = defaultFontSize
         persistFontSize()
     }
@@ -791,6 +907,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 private struct FloatingTextView: View {
     @ObservedObject var textContent: FloatingTextContent
     let fontSize: CGFloat
+    let onTextChange: (String) -> Void
     private let cornerRadius: CGFloat = 16
     private let topBarHeight: CGFloat = 36
     private let edgeDragThickness: CGFloat = 12
@@ -820,6 +937,9 @@ private struct FloatingTextView: View {
             .font(.system(size: fontSize, weight: .regular, design: .monospaced))
             .scrollContentBackground(.hidden)
             .background(Color.clear)
+            .onChange(of: textContent.text) { updatedText in
+                onTextChange(updatedText)
+            }
     }
 
     private var topBar: some View {

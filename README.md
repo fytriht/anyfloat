@@ -9,8 +9,8 @@ Select text anywhere, then press your configured global hotkey (default: `Comman
 - Configurable global hotkey (default: `Command + Shift + F`, persisted locally)
 - Floating panel (borderless, draggable around the text area edges, top-left custom close button, closable with `Command + W`, resizable, always on top, opens near mouse pointer)
 - Multiple floating panels: each hotkey trigger opens a new window
-- Editable text area inside each floating panel
-- Panel size limits: minimum `300 x 400`, maximum `600 x 800`
+- Editable text area inside each floating panel (window height auto-adjusts to keep content visible while typing; once you manually resize a panel, that panel keeps manual size)
+- Panel size limits: minimum `300 x 120`, maximum `600 x 800`
 - In-panel zoom: `Command + +` / `Command + -`, reset with `Command + 0` (default font size: `12`, persisted locally)
 - Status bar menu:
   - `Show Selected Text`
@@ -70,12 +70,13 @@ If permission is newly granted, quit and relaunch TextF.
 2. Select text in another app
 3. Press your configured global hotkey (default: `Command + Shift + F`)
 4. Selected text appears in a new floating panel (you can trigger repeatedly to open multiple windows)
-5. You can edit the captured text directly inside the floating panel
-6. If no text is selected, an empty editor opens for immediate typing; if text is captured, the panel keeps the editor unfocused on open
-7. In the floating panel, use `Command + +` / `Command + -` to adjust font size
-8. Use `Command + 0` to reset font size to `12`
-9. Drag the panel from any non-text area around the content (top/left/right/bottom edges)
-10. Close the panel with `Command + W` or the top-left close button
+5. You can edit the captured text directly inside the floating panel; panel height expands/shrinks with content (within min/max limits and visible screen area)
+6. If you manually resize a panel, that panel switches to manual sizing and no longer auto-adjusts height
+7. If no text is selected, an empty editor opens for immediate typing; if text is captured, the panel keeps the editor unfocused on open
+8. In the floating panel, use `Command + +` / `Command + -` to adjust font size
+9. Use `Command + 0` to reset font size to `12`
+10. Drag the panel from any non-text area around the content (top/left/right/bottom edges)
+11. Close the panel with `Command + W` or the top-left close button
 
 You can also click the menu bar item `TextF` and choose `Show Selected Text`.
 To change the global hotkey, open `TextF` -> `Set Hotkey (...)`; settings are saved in local `UserDefaults`.
