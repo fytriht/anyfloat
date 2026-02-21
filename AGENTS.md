@@ -3,13 +3,14 @@
 This file defines repository-specific instructions for coding agents working in `AnyFloat`.
 
 ## Project Summary
-- App type: native macOS menu bar app (SwiftPM).
-- Main entry: `Sources/AnyFloatApp/main.swift`.
+- App type: native macOS menu bar app (SwiftPM + Xcode project).
+- Main entry: `Sources/AnyFloatApp/AnyFloatApp.swift`.
 - Package manifest: `Package.swift`.
 - Packaging script: `scripts/package_app.sh`.
 
 ## Environment
 - Required: macOS 13+, Xcode Command Line Tools (`swift` available).
+- Required for packaging: full Xcode app selected for `xcodebuild`.
 - Keep cache/temp artifacts inside repo when possible (see `scripts/package_app.sh`).
 
 ## Build, Run, Verify
@@ -26,7 +27,7 @@ Before finishing code changes, agents should run at least:
 - Prefer minimal, targeted edits.
 - Keep behavior consistent with existing hotkey / menu bar / AX text extraction flow unless change is requested.
 - Avoid introducing new dependencies unless necessary.
-- Follow existing Swift style in `main.swift`:
+- Follow existing Swift style in `AnyFloatApp.swift`:
   - clear naming
   - small focused helpers
   - explicit fallbacks for AX/clipboard behavior

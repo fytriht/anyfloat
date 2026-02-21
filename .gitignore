@@ -6,3 +6,5 @@ dist/
 .cache/
 .home/
 .note
+**/xcuserdata/
+.build-xcode/

@@ -26,6 +26,7 @@ Select text anywhere, then press your configured global hotkey (default: `Comman
 
 - macOS 13.0+
 - Xcode Command Line Tools (`swift` command available)
+- Full Xcode app is required for `scripts/package_app.sh` (`xcodebuild archive`)
 - Accessibility permission for AnyFloat
 
 ## Build and Run (SwiftPM)
@@ -35,6 +36,18 @@ cd .
 swift build -c release
 ./.build/release/AnyFloat
 ```
+
+## Build and Run (Xcode)
+
+1. Open `/Users/zhi/Developer/AnyFloat/AnyFloat.xcodeproj`
+2. Select the `AnyFloat` scheme
+3. Run (`Command + R`)
+
+Project notes:
+
+- App target uses existing source file `Sources/AnyFloatApp/AnyFloatApp.swift`
+- App `Info.plist` path is `XcodeSupport/Info.plist`
+- `LSUIElement` is enabled for menu bar app behavior
 
 ## Build `.app` Bundle
 
@@ -47,6 +60,7 @@ Output app bundle:
 
 ```text
 dist/AnyFloat.app
+dist/AnyFloat.xcarchive
 ```
 
 Signing behavior:
@@ -93,8 +107,8 @@ Both settings are saved in local `UserDefaults`.
 ## Project Layout
 
 ```text
-Sources/AnyFloatApp/main.swift   # app entry, hotkey, AX reader, floating panel
-scripts/package_app.sh        # build + app bundle packaging + signing
+Sources/AnyFloatApp/AnyFloatApp.swift   # app entry, hotkey, AX reader, floating panel
+scripts/package_app.sh        # xcodebuild archive + app export + signing
 Package.swift                 # SwiftPM manifest
 ```
 

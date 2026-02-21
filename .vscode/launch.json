@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:AnyFloat}",
+      "name": "Debug AnyFloat",
+      "target": "AnyFloat",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug AnyFloat"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:AnyFloat}",
+      "name": "Release AnyFloat",
+      "target": "AnyFloat",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release AnyFloat"
+    }
+  ]
+}
