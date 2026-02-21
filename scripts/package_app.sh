@@ -9,9 +9,39 @@ PROJECT_PATH="$ROOT_DIR/AnyFloat.xcodeproj"
 DERIVED_DATA_DIR="$ROOT_DIR/.build-xcode"
 ARCHIVE_PATH="$DIST_DIR/${APP_NAME}.xcarchive"
 APP_DIR="$DIST_DIR/${APP_NAME}.app"
+DMG_STAGING_DIR="$DIST_DIR/${APP_NAME}-dmg"
+DMG_PATH="$DIST_DIR/${APP_NAME}.dmg"
+CREATE_DMG=0
 PACKAGE_TIME_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 PACKAGE_UNIX_TIMESTAMP="$(date -u +"%s")"
 APP_INFO_PLIST="$APP_DIR/Contents/Info.plist"
+
+print_usage() {
+  cat <<EOF
+Usage: $(basename "$0") [--dmg]
+
+Options:
+  --dmg         Also create dist/${APP_NAME}.dmg for drag-to-Applications install
+  -h, --help    Show this help message
+EOF
+}
+
+for arg in "$@"; do
+  case "$arg" in
+    --dmg)
+      CREATE_DMG=1
+      ;;
+    -h|--help)
+      print_usage
+      exit 0
+      ;;
+    *)
+      echo "error: unknown argument: $arg" >&2
+      print_usage >&2
+      exit 1
+      ;;
+  esac
+done
 
 cd "$ROOT_DIR"
 
@@ -81,3 +111,27 @@ codesign --force --deep --sign "$IDENTITY" "$APP_DIR"
 xattr -cr "$APP_DIR"
 
 echo "Built ${APP_DIR}"
+
+if [[ "$CREATE_DMG" -eq 1 ]]; then
+  if ! command -v hdiutil >/dev/null 2>&1; then
+    echo "error: hdiutil is not available." >&2
+    exit 1
+  fi
+
+  rm -rf "$DMG_STAGING_DIR" "$DMG_PATH"
+  mkdir -p "$DMG_STAGING_DIR"
+  ditto "$APP_DIR" "$DMG_STAGING_DIR/${APP_NAME}.app"
+  ln -s /Applications "$DMG_STAGING_DIR/Applications"
+
+  hdiutil create \
+    -volname "$APP_NAME" \
+    -srcfolder "$DMG_STAGING_DIR" \
+    -ov \
+    -format UDZO \
+    "$DMG_PATH"
+
+  rm -rf "$DMG_STAGING_DIR"
+  echo "Built ${DMG_PATH}"
+else
+  echo "Skipped DMG creation. Pass --dmg to build ${DMG_PATH}."
+fi

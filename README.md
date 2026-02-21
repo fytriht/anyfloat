@@ -49,19 +49,37 @@ Project notes:
 - App `Info.plist` path is `XcodeSupport/Info.plist`
 - `LSUIElement` is enabled for menu bar app behavior
 
-## Build `.app` Bundle
+## Build `.app` (Default)
 
 ```bash
 cd .
 ./scripts/package_app.sh
 ```
 
-Output app bundle:
+Default output artifacts:
 
 ```text
 dist/AnyFloat.app
 dist/AnyFloat.xcarchive
 ```
+
+## Build `.dmg` (Optional)
+
+```bash
+cd .
+./scripts/package_app.sh --dmg
+```
+
+Additional output artifact:
+
+```text
+dist/AnyFloat.dmg
+```
+
+Install flow for end users:
+
+1. Open `dist/AnyFloat.dmg`
+2. Drag `AnyFloat.app` to `Applications`
 
 Signing behavior:
 
@@ -108,7 +126,7 @@ Both settings are saved in local `UserDefaults`.
 
 ```text
 Sources/AnyFloatApp/AnyFloatApp.swift   # app entry, hotkey, AX reader, floating panel
-scripts/package_app.sh        # xcodebuild archive + app export + signing
+scripts/package_app.sh        # xcodebuild archive + app export + signing (optional dmg creation)
 Package.swift                 # SwiftPM manifest
 ```
 
