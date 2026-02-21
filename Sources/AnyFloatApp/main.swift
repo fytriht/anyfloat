@@ -4,7 +4,7 @@ import Carbon
 import ServiceManagement
 
 @main
-struct TextFApp: App {
+struct AnyFloatApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
@@ -408,7 +408,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let modifiers: UInt32 = hotKeyConfiguration.modifiers
         let target = GetEventDispatcherTarget()
 
-        let hotKeyID = EventHotKeyID(signature: OSType(UInt32(truncatingIfNeeded: "TXTF".fourCharCodeValue)), id: 1)
+        let hotKeyID = EventHotKeyID(signature: OSType(UInt32(truncatingIfNeeded: "ANYF".fourCharCodeValue)), id: 1)
         let status = RegisterEventHotKey(keyCode, modifiers, hotKeyID, target, 0, &hotKeyRef)
         if status != noErr {
             NSLog("RegisterEventHotKey failed: \(status)")
@@ -456,14 +456,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
-            button.title = "TextF"
+            button.title = "AnyFloat"
         }
 
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Show Selected Text", action: #selector(handleShowSelectedText), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Preferences...", action: #selector(handleOpenPreferences), keyEquivalent: ","))
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Quit TextF", action: #selector(handleQuit), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit AnyFloat", action: #selector(handleQuit), keyEquivalent: "q"))
 
         menu.items.forEach { $0.target = self }
         item.menu = menu
@@ -1100,7 +1100,7 @@ enum SelectedTextReader {
             return text
         }
 
-        // 1) Then try the latest known non-TextF app PID.
+        // 1) Then try the latest known non-AnyFloat app PID.
         if let preferredAppPID,
            let text = selectedText(fromAppPID: preferredAppPID) {
             return text

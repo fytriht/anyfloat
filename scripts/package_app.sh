@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
-APP_NAME="TextFApp"
+APP_NAME="AnyFloat"
 APP_DIR="$DIST_DIR/${APP_NAME}.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
@@ -37,30 +37,30 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>TextF</string>
+    <string>AnyFloat</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>TextF</string>
+    <string>AnyFloat</string>
     <key>CFBundleIdentifier</key>
-    <string>com.textf.app</string>
+    <string>com.anyfloat.app</string>
     <key>CFBundleExecutable</key>
-    <string>TextFApp</string>
+    <string>${APP_NAME}</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>
-    <string>TXTF</string>
+    <string>ANYF</string>
     <key>CFBundleShortVersionString</key>
     <string>1.0.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
-    <key>TextFPackageTimeUTC</key>
+    <key>AnyFloatPackageTimeUTC</key>
     <string>${PACKAGE_TIME_UTC}</string>
-    <key>TextFPackageTimestamp</key>
+    <key>AnyFloatPackageTimestamp</key>
     <string>${PACKAGE_UNIX_TIMESTAMP}</string>
     <key>NSHighResolutionCapable</key>
     <true/>
@@ -74,7 +74,7 @@ PLIST
 chmod +x "$MACOS_DIR/${APP_NAME}"
 
 # Legacy PkgInfo (some tools still expect it).
-echo "APPLTXTF" > "$CONTENTS_DIR/PkgInfo"
+echo "APPLANYF" > "$CONTENTS_DIR/PkgInfo"
 
 # Prefer a real Apple Development identity; fallback to ad-hoc.
 IDENTITY="${CODESIGN_IDENTITY:-}"

@@ -1,10 +1,10 @@
 # AGENTS.md
 
-This file defines repository-specific instructions for coding agents working in `TextF`.
+This file defines repository-specific instructions for coding agents working in `AnyFloat`.
 
 ## Project Summary
 - App type: native macOS menu bar app (SwiftPM).
-- Main entry: `Sources/TextFApp/main.swift`.
+- Main entry: `Sources/AnyFloatApp/main.swift`.
 - Package manifest: `Package.swift`.
 - Packaging script: `scripts/package_app.sh`.
 
@@ -15,7 +15,7 @@ This file defines repository-specific instructions for coding agents working in 
 ## Build, Run, Verify
 - Debug build: `swift build`
 - Release build: `swift build -c release`
-- Run release binary: `./.build/release/TextFApp`
+- Run release binary: `./.build/release/AnyFloat`
 - Package app bundle: `./scripts/package_app.sh`
 
 Before finishing code changes, agents should run at least:

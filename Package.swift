@@ -2,17 +2,17 @@
 import PackageDescription
 
 let package = Package(
-    name: "TextF",
+    name: "AnyFloat",
     platforms: [
         .macOS(.v13)
     ],
     products: [
-        .executable(name: "TextFApp", targets: ["TextFApp"]) 
+        .executable(name: "AnyFloat", targets: ["AnyFloat"])
     ],
     targets: [
         .executableTarget(
-            name: "TextFApp",
-            path: "Sources/TextFApp"
+            name: "AnyFloat",
+            path: "Sources/AnyFloatApp"
         )
     ]
 )

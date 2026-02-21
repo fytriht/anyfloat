@@ -1,6 +1,6 @@
-# TextF
+# AnyFloat
 
-TextF is a native macOS menu bar app that captures selected text from other apps and shows it in a floating window.
+AnyFloat is a native macOS menu bar app that captures selected text from other apps and shows it in a floating window.
 
 Select text anywhere, then press your configured global hotkey (default: `Command + Shift + F`).
 
@@ -16,7 +16,7 @@ Select text anywhere, then press your configured global hotkey (default: `Comman
 - Status bar menu:
   - `Show Selected Text`
   - `Preferences...` (hotkey + launch at login)
-  - `Quit TextF`
+  - `Quit AnyFloat`
 - Multi-strategy text extraction for better compatibility:
   - Accessibility selected-text APIs
   - Range-based extraction fallback
@@ -26,14 +26,14 @@ Select text anywhere, then press your configured global hotkey (default: `Comman
 
 - macOS 13.0+
 - Xcode Command Line Tools (`swift` command available)
-- Accessibility permission for TextF
+- Accessibility permission for AnyFloat
 
 ## Build and Run (SwiftPM)
 
 ```bash
 cd .
 swift build -c release
-./.build/release/TextFApp
+./.build/release/AnyFloat
 ```
 
 ## Build `.app` Bundle
@@ -46,7 +46,7 @@ cd .
 Output app bundle:
 
 ```text
-dist/TextFApp.app
+dist/AnyFloat.app
 ```
 
 Signing behavior:
@@ -56,17 +56,17 @@ Signing behavior:
 
 ## First Launch Setup
 
-TextF requires Accessibility access to read selected text from other apps.
+AnyFloat requires Accessibility access to read selected text from other apps.
 
 1. Open `System Settings`
 2. Go to `Privacy & Security` -> `Accessibility`
-3. Enable `TextFApp`
+3. Enable `AnyFloat`
 
-If permission is newly granted, quit and relaunch TextF.
+If permission is newly granted, quit and relaunch AnyFloat.
 
 ## Usage
 
-1. Launch TextF
+1. Launch AnyFloat
 2. Select text in another app
 3. Press your configured global hotkey (default: `Command + Shift + F`)
 4. Selected text appears in a new floating panel (you can trigger repeatedly to open multiple windows)
@@ -78,22 +78,22 @@ If permission is newly granted, quit and relaunch TextF.
 10. Drag the panel from any non-text area around the content (top/left/right/bottom edges)
 11. Close the panel with `Command + W` or the top-left close button
 
-You can also click the menu bar item `TextF` and choose `Show Selected Text`.
-To change the global hotkey or startup behavior, open `TextF` -> `Preferences...` (or press `Command + ,`).
+You can also click the menu bar item `AnyFloat` and choose `Show Selected Text`.
+To change the global hotkey or startup behavior, open `AnyFloat` -> `Preferences...` (or press `Command + ,`).
 Both settings are saved in local `UserDefaults`.
 
 ## Troubleshooting
 
 - Hotkey does not trigger:
   - Check for shortcut conflicts with other tools
-  - Relaunch TextF
+  - Relaunch AnyFloat
 - Some apps still fail:
-  - Confirm Accessibility permission is granted to `TextFApp`
+  - Confirm Accessibility permission is granted to `AnyFloat`
 
 ## Project Layout
 
 ```text
-Sources/TextFApp/main.swift   # app entry, hotkey, AX reader, floating panel
+Sources/AnyFloatApp/main.swift   # app entry, hotkey, AX reader, floating panel
 scripts/package_app.sh        # build + app bundle packaging + signing
 Package.swift                 # SwiftPM manifest
 ```
