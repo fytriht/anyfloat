@@ -1,0 +1,10 @@
+{
+  "files.exclude": {
+    ".build": true,
+    ".build-cache": true,
+    ".build-xcode": true,
+    ".cache": true,
+    ".home": true,
+    ".tmp": true
+  }
+}
