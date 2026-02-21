@@ -1,8 +1,8 @@
 # AnyFloat
 
-AnyFloat is a native macOS menu bar app that captures selected text from other apps and shows it in a floating window.
+AnyFloat is a native macOS menu bar app built around one idea: quickly present anything in a floating window.
 
-Select text anywhere, then press your configured global hotkey (default: `Command + Shift + F`).
+Press your configured global hotkey (default: `Command + Shift + F`) to bring content into view. Today it supports selected text capture and blank-window quick input, while screenshot-based content support is planned next.
 
 ## Features
 
