@@ -110,7 +110,7 @@ If permission is newly granted, quit and relaunch AnyFloat.
 10. Drag the panel from any non-text area around the content (top/left/right/bottom edges)
 11. Close the panel with `Command + W` or the top-left close button
 
-You can also click the menu bar item `AnyFloat` and choose `Show Selected Text`.
+You can also click the AnyFloat menu bar icon and choose `Show Selected Text`.
 To change the global hotkey or startup behavior, open `AnyFloat` -> `Preferences...` (or press `Command + ,`).
 Both settings are saved in local `UserDefaults`.
 

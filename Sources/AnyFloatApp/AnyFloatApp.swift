@@ -454,9 +454,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupStatusItem() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = item.button {
-            button.title = "AnyFloat"
+            if let image = NSImage(systemSymbolName: "macwindow.on.rectangle", accessibilityDescription: "AnyFloat") {
+                image.isTemplate = true
+                button.image = image
+                button.imagePosition = .imageOnly
+                button.toolTip = "AnyFloat"
+            } else {
+                // Keep a readable fallback if symbol loading fails.
+                button.title = "AnyFloat"
+            }
         }
 
         let menu = NSMenu()
