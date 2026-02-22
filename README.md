@@ -49,7 +49,7 @@ Project notes:
 - App `Info.plist` path is `XcodeSupport/Info.plist`
 - `LSUIElement` is enabled for menu bar app behavior
 
-## Build `.app` (Default)
+## Build `.app` (Debug, Default)
 
 ```bash
 cd .
@@ -57,6 +57,20 @@ cd .
 ```
 
 Default output artifacts:
+
+```text
+dist/AnyFloat-Debug.app
+dist/AnyFloat-Debug.xcarchive
+```
+
+## Build `.app` (Release)
+
+```bash
+cd .
+./scripts/package_app.sh --release
+```
+
+Release output artifacts:
 
 ```text
 dist/AnyFloat.app
@@ -67,19 +81,21 @@ dist/AnyFloat.xcarchive
 
 ```bash
 cd .
-./scripts/package_app.sh --dmg
+./scripts/package_app.sh [--debug|--release] --dmg
 ```
 
 Additional output artifact:
 
 ```text
 dist/AnyFloat.dmg
+# or
+dist/AnyFloat-Debug.dmg
 ```
 
 Install flow for end users:
 
-1. Open `dist/AnyFloat.dmg`
-2. Drag `AnyFloat.app` to `Applications`
+1. Open the generated DMG (`dist/AnyFloat.dmg` or `dist/AnyFloat-Debug.dmg`)
+2. Drag the included app bundle to `Applications`
 
 Signing behavior:
 

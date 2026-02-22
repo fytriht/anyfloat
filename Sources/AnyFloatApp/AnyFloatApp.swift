@@ -471,7 +471,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Show Selected Text", action: #selector(handleShowSelectedText), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Preferences...", action: #selector(handleOpenPreferences), keyEquivalent: ","))
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Quit AnyFloat", action: #selector(handleQuit), keyEquivalent: "q"))
+        #if DEBUG
+        let quitTitle = "Quit AnyFloat Debug"
+        #else
+        let quitTitle = "Quit AnyFloat"
+        #endif
+        menu.addItem(NSMenuItem(title: quitTitle, action: #selector(handleQuit), keyEquivalent: "q"))
 
         menu.items.forEach { $0.target = self }
         item.menu = menu
