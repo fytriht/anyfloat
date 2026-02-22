@@ -9,9 +9,15 @@ let package = Package(
     products: [
         .executable(name: "AnyFloat", targets: ["AnyFloat"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/mixpanel/mixpanel-swift.git", from: "4.3.1")
+    ],
     targets: [
         .executableTarget(
             name: "AnyFloat",
+            dependencies: [
+                .product(name: "Mixpanel", package: "mixpanel-swift")
+            ],
             path: "Sources/AnyFloatApp"
         )
     ]

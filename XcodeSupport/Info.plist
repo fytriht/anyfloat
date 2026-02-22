@@ -26,5 +26,7 @@
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>MIXPANEL_PROJECT_TOKEN</key>
+    <string>947e6bac3157bfe819b0650ddf845111</string>
 </dict>
 </plist>

@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import Carbon
 import ServiceManagement
+import Mixpanel
 
 @main
 struct AnyFloatApp: App {
@@ -369,7 +370,7 @@ private struct HotKeyConfiguration: Codable {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var hotKeyRef: EventHotKeyRef?
     private var hotKeyHandlerRef: EventHandlerRef?
     private let panelController = FloatingPanelController()
@@ -381,6 +382,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let launchAtLoginDefaultsKey = "app.launchAtLoginEnabled"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AnalyticsManager.shared.configure()
         NSApp.setActivationPolicy(.accessory)
         requestAccessibilityIfNeeded()
         seedLastExternalAppPID()
@@ -392,6 +394,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         unregisterHotKey()
+        AnalyticsManager.shared.flush()
     }
 
     private func scheduleHotKeyRegistration() {
@@ -443,13 +446,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func onHotKeyPressed() {
         guard !isConfiguringHotKey else { return }
-        showSelectedTextPanel()
+        showSelectedTextPanel(source: "hotkey")
     }
 
-    private func showSelectedTextPanel() {
+    private func showSelectedTextPanel(source: String) {
         refreshLastExternalAppPIDFromCurrentFrontmost()
         let selectedText = SelectedTextReader.readSelectedText(preferredAppPID: lastExternalAppPID)
         let text = selectedText ?? ""
+        AnalyticsManager.shared.track(
+            "main_window_open",
+            properties: [
+                "has_text": selectedText == nil ? 0 : 1,
+                "source": source
+            ]
+        )
         panelController.show(text: text, keepUnfocusedOnOpen: selectedText != nil)
     }
 
@@ -478,16 +488,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
         menu.addItem(NSMenuItem(title: quitTitle, action: #selector(handleQuit), keyEquivalent: "q"))
 
+        menu.delegate = self
         menu.items.forEach { $0.target = self }
         item.menu = menu
         self.statusItem = item
     }
 
+    func menuWillOpen(_ menu: NSMenu) {
+        AnalyticsManager.shared.track("menu_clicked", properties: [:])
+    }
+
     @objc private func handleShowSelectedText() {
-        showSelectedTextPanel()
+        AnalyticsManager.shared.track("menu_item_clicked", properties: ["type": "show-main-window"])
+        showSelectedTextPanel(source: "menuitem")
     }
 
     @objc private func handleQuit() {
+        AnalyticsManager.shared.track("menu_item_clicked", properties: ["type": "quit"])
+        AnalyticsManager.shared.track("app_quit", properties: ["axTrusted": AXIsProcessTrusted() ? 1 : 0])
         NSApp.terminate(nil)
     }
 
@@ -523,12 +541,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func handleOpenPreferences() {
+        AnalyticsManager.shared.track("menu_item_clicked", properties: ["type": "preferences"])
         openPreferencesWindow()
     }
 
     private func applyHotKeyConfiguration(_ configuration: HotKeyConfiguration) {
         hotKeyConfiguration = configuration
         hotKeyConfiguration.persistToDefaults()
+        AnalyticsManager.shared.track(
+            "preferences_updated",
+            properties: [
+                "type": "hotkey"
+            ]
+        )
         registerHotKey()
     }
 
@@ -536,6 +561,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.set(enabled, forKey: launchAtLoginDefaultsKey)
         do {
             try setLaunchAtLoginEnabled(enabled)
+            AnalyticsManager.shared.track(
+                "preferences_updated",
+                properties: [
+                    "type": "launch_at_login"
+                ]
+            )
             return true
         } catch {
             UserDefaults.standard.set(!enabled, forKey: launchAtLoginDefaultsKey)
@@ -617,6 +648,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.lastExternalAppPID = app.processIdentifier
             }
         }
+    }
+}
+
+private final class AnalyticsManager {
+    static let shared = AnalyticsManager()
+
+    private let infoPlistTokenKey = "MIXPANEL_PROJECT_TOKEN"
+    private let envTokenKey = "MIXPANEL_PROJECT_TOKEN"
+    private var isConfigured = false
+    private var isEnabled = false
+
+    private init() {}
+
+    func configure() {
+        guard !isConfigured else { return }
+        isConfigured = true
+
+        guard let token = resolveProjectToken(), !token.isEmpty else {
+            NSLog("Mixpanel disabled: missing MIXPANEL_PROJECT_TOKEN.")
+            return
+        }
+
+        Mixpanel.initialize(token: token)
+        isEnabled = true
+
+        let buildEnv: String
+        #if DEBUG
+        buildEnv = "debug"
+        #else
+        buildEnv = "release"
+        #endif
+
+        Mixpanel.mainInstance().registerSuperProperties([
+            "app_platform": "macOS",
+            "app_name": "AnyFloat",
+            "env": buildEnv
+        ])
+        track("app_launch", properties: [:])
+    }
+
+    func track(_ event: String, properties: Properties) {
+        guard isEnabled else { return }
+        Mixpanel.mainInstance().track(event: event, properties: properties)
+    }
+
+    func flush() {
+        guard isEnabled else { return }
+        Mixpanel.mainInstance().flush()
+    }
+
+    private func resolveProjectToken() -> String? {
+        let env = ProcessInfo.processInfo.environment
+        if let token = env[envTokenKey]?.trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty {
+            return token
+        }
+
+        if let plistToken = Bundle.main.object(forInfoDictionaryKey: infoPlistTokenKey) as? String {
+            let trimmed = plistToken.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+        }
+
+        return nil
     }
 }
 
