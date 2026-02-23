@@ -14,6 +14,7 @@ Press your configured global hotkey (default: `Command + Shift + F`) to bring co
 - Panel size limits: minimum `300 x 120`, maximum `600 x 800`
 - In-panel zoom: `Command + +` / `Command + -`, reset with `Command + 0` (default font size: `12`, persisted locally)
 - Status bar menu:
+  - `About AnyFloat` (opens macOS standard About panel)
   - `Show Selected Text`
   - `Preferences...` (hotkey + launch at login)
   - `Quit AnyFloat`

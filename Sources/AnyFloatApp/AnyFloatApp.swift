@@ -13,6 +13,11 @@ struct AnyFloatApp: App {
             EmptyView()
         }
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About AnyFloat") {
+                    appDelegate.openAboutWindow()
+                }
+            }
             CommandGroup(replacing: .appSettings) {
                 Button("Preferences...") {
                     appDelegate.openPreferencesWindow()
@@ -481,6 +486,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(NSMenuItem(title: "Show Selected Text", action: #selector(handleShowSelectedText), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Preferences...", action: #selector(handleOpenPreferences), keyEquivalent: ","))
         menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "About AnyFloat", action: #selector(handleOpenAbout), keyEquivalent: ""))
         #if DEBUG
         let quitTitle = "Quit AnyFloat Debug"
         #else
@@ -540,9 +546,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.show()
     }
 
+    func openAboutWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+        let urlString = "https://github.com/fytriht/anyfloat"
+        let creditsText = "GitHub: \(urlString)"
+        let credits = NSMutableAttributedString(string: creditsText)
+        if let url = URL(string: urlString) {
+            let urlRange = (creditsText as NSString).range(of: urlString)
+            if urlRange.location != NSNotFound {
+                credits.addAttribute(.link, value: url, range: urlRange)
+                credits.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: urlRange)
+            }
+        }
+
+        let options: [NSApplication.AboutPanelOptionKey: Any] = [
+            NSApplication.AboutPanelOptionKey(rawValue: "Credits"): credits,
+            NSApplication.AboutPanelOptionKey(rawValue: "Copyright"): "© 2026 AnyFloat"
+        ]
+        NSApp.orderFrontStandardAboutPanel(options: options)
+    }
+
     @objc private func handleOpenPreferences() {
         AnalyticsManager.shared.track("menu_item_clicked", properties: ["type": "preferences"])
         openPreferencesWindow()
+    }
+
+    @objc private func handleOpenAbout() {
+        AnalyticsManager.shared.track("menu_item_clicked", properties: ["type": "about"])
+        openAboutWindow()
     }
 
     private func applyHotKeyConfiguration(_ configuration: HotKeyConfiguration) {
