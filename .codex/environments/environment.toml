@@ -6,6 +6,6 @@ name = "AnyFloat"
 script = ""
 
 [[actions]]
-name = "Run"
+name = "Run AnyFloat-Debug"
 icon = "run"
-command = "./scripts/package_app.sh && open ./dist/AnyFloat.app"
+command = "./scripts/package_app.sh && open ./dist/AnyFloat-Debug.app"
