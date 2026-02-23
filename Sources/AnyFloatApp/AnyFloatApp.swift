@@ -549,7 +549,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func openAboutWindow() {
         NSApp.activate(ignoringOtherApps: true)
         let urlString = "https://github.com/fytriht/anyfloat"
-        let creditsText = "GitHub: \(urlString)"
+        let creditsText = urlString
         let credits = NSMutableAttributedString(string: creditsText)
         if let url = URL(string: urlString) {
             let urlRange = (creditsText as NSString).range(of: urlString)
