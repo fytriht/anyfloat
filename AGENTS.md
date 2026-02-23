@@ -42,6 +42,11 @@ Before finishing code changes, agents should run at least:
 - Update `AGENTS.md` whenever repository workflow or agent collaboration rules change.
 - Before finishing a task, verify docs are in sync; if documentation-impacting behavior changed, doc updates are required.
 
+## Test Case Reference
+- When needed, agents may reference `.note/test-cases.md` for test case details.
+- Do not edit `.note/test-cases.md`.
+- If `.note/test-cases.md` is missing, inform the user to pull/sync that repository manually.
+
 ## Change Notes
 When making non-trivial changes, include:
 - What changed
