@@ -2,11 +2,11 @@
 
 AnyFloat is a native macOS menu bar app built around one idea: quickly present anything in a floating window.
 
-Press your configured global hotkey (default: `Command + Shift + F`) to bring content into view. Today it supports selected text capture and blank-window quick input, while screenshot-based content support is planned next.
+Press your configured global hotkey (default: `Shift + Option + F`) to bring content into view. Today it supports selected text capture and blank-window quick input, while screenshot-based content support is planned next.
 
 ## Features
 
-- Configurable global hotkey (default: `Command + Shift + F`, persisted locally)
+- Configurable global hotkey (default: `Shift + Option + F`, persisted locally)
 - Launch at login (enabled by default, configurable from Preferences)
 - Floating panel (borderless, draggable around the text area edges, top-left custom close button, closable with `Command + W`, resizable, always on top, opens near mouse pointer)
 - Multiple floating panels: each hotkey trigger opens a new window
@@ -117,7 +117,7 @@ If permission is newly granted, quit and relaunch AnyFloat.
 
 1. Launch AnyFloat
 2. Select text in another app
-3. Press your configured global hotkey (default: `Command + Shift + F`)
+3. Press your configured global hotkey (default: `Shift + Option + F`)
 4. Selected text appears in a new floating panel (you can trigger repeatedly to open multiple windows)
 5. You can edit the captured text directly inside the floating panel; panel height expands/shrinks with content (within min/max limits and visible screen area)
 6. If you manually resize a panel, that panel switches to manual sizing and no longer auto-adjusts height

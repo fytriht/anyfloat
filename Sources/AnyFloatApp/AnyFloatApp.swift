@@ -270,7 +270,7 @@ private struct HotKeyConfiguration: Codable {
     let modifiers: UInt32
 
     static let defaultsKey = "globalHotKey.configuration"
-    static let defaultValue = HotKeyConfiguration(keyCode: UInt32(kVK_ANSI_F), modifiers: UInt32(cmdKey | shiftKey))
+    static let defaultValue = HotKeyConfiguration(keyCode: UInt32(kVK_ANSI_F), modifiers: UInt32(shiftKey | optionKey))
 
     static let supportedKeys: [HotKeyOption] = [
         HotKeyOption(keyCode: UInt32(kVK_ANSI_A), label: "A"),
