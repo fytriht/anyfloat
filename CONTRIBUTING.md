@@ -83,10 +83,15 @@ If behavior changes, add/update docs accordingly.
 - Update `README.md` when user-facing behavior, setup, or usage changes.
 - Update `CONTRIBUTING.md` when collaboration workflow changes.
 
+## Branching and Merge Policy
+
+- `main` is the trunk branch for development.
+- All commits should be merged into `main` through pull requests.
+- Direct push to `main` is not allowed.
+
 ## Pull Request Checklist
 
 - [ ] Scope is focused and avoids unrelated refactors
 - [ ] Build succeeds (`swift build`)
 - [ ] Packaging verified if relevant (`./scripts/package_app.sh`)
 - [ ] Documentation updated when needed
-
