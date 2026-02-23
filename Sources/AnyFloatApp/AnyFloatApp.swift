@@ -14,8 +14,8 @@ struct AnyFloatApp: App {
         }
         .commands {
             CommandGroup(replacing: .appInfo) {
-                Button("About AnyFloat") {
-                    appDelegate.openAboutWindow()
+                Button("About AnyFloatsdjfhdsfo") {
+                    appDelegate.openAboutWindowAAA()
                 }
             }
             CommandGroup(replacing: .appSettings) {
