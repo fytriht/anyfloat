@@ -26,82 +26,11 @@ Press your configured global hotkey (default: `Shift + Option + F`) to bring con
 ## Requirements
 
 - macOS 13.0+
-- Xcode Command Line Tools (`swift` command available)
-- Full Xcode app is required for `scripts/package_app.sh` (`xcodebuild archive`)
 - Accessibility permission for AnyFloat
 
-## Build and Run (SwiftPM)
+## Contributing
 
-```bash
-cd .
-swift build -c release
-./.build/release/AnyFloat
-```
-
-## Build and Run (Xcode)
-
-1. Open `/Users/zhi/Developer/AnyFloat/AnyFloat.xcodeproj`
-2. Select the `AnyFloat` scheme
-3. Run (`Command + R`)
-
-Project notes:
-
-- App target uses existing source file `Sources/AnyFloatApp/AnyFloatApp.swift`
-- App `Info.plist` path is `XcodeSupport/Info.plist`
-- `LSUIElement` is enabled for menu bar app behavior
-
-## Build `.app` (Debug, Default)
-
-```bash
-cd .
-./scripts/package_app.sh
-```
-
-Default output artifacts:
-
-```text
-dist/AnyFloat-Debug.app
-dist/AnyFloat-Debug.xcarchive
-```
-
-## Build `.app` (Release)
-
-```bash
-cd .
-./scripts/package_app.sh --release
-```
-
-Release output artifacts:
-
-```text
-dist/AnyFloat.app
-dist/AnyFloat.xcarchive
-```
-
-## Build `.dmg` (Optional)
-
-```bash
-cd .
-./scripts/package_app.sh [--debug|--release] --dmg
-```
-
-Additional output artifact:
-
-```text
-dist/AnyFloat.dmg
-# or
-dist/AnyFloat-Debug.dmg
-```
-
-Install flow for end users:
-
-1. Open the generated DMG (`dist/AnyFloat.dmg` or `dist/AnyFloat-Debug.dmg`)
-2. Drag the included app bundle to `Applications`
-
-Signing behavior:
-
-- Uses `Apple Development` identity if available
-- Falls back to ad-hoc signing when no identity is found
+For contributor workflow (debug/release build, Xcode run, packaging, validation checklist), see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## First Launch Setup
 
@@ -138,14 +67,6 @@ Both settings are saved in local `UserDefaults`.
   - Relaunch AnyFloat
 - Some apps still fail:
   - Confirm Accessibility permission is granted to `AnyFloat`
-
-## Project Layout
-
-```text
-Sources/AnyFloatApp/AnyFloatApp.swift   # app entry, hotkey, AX reader, floating panel
-scripts/package_app.sh        # xcodebuild archive + app export + signing (optional dmg creation)
-Package.swift                 # SwiftPM manifest
-```
 
 ## License
 
