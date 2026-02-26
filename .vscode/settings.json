@@ -6,5 +6,6 @@
     ".cache": true,
     ".home": true,
     ".tmp": true
-  }
+  },
+  "git.branchProtectionPrompt": "alwaysCommit"
 }
