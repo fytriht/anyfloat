@@ -1,12 +1,34 @@
-# AnyFloat
+<p align="center">
+AnyFloat is a native macOS app that captures text<br/>
+into always-on-top floating windows.
+</p>
 
-AnyFloat is a native macOS app that captures text into always-on-top floating windows and follows you across macOS Spaces.
+<p align="center">
+<a href="https://github.com/fytriht/anyfloat/releases">Download from Releases</a>
+<!-- [Download from Releases](https://github.com/fytriht/anyfloat/releases) -->
+</p>
 
-| Feature                                                      | Preview                       |
-|--------------------------------------------------------------|-------------------------------|
-| Trigger the hotkey to capture selected text                  | ![](docs/assets/2602241.gif)  |
-| Supports multiple floating windows                           | ![](docs/assets//2602262.gif) |
-| With no selection, the hotkey opens a blank quick-note panel | ![](docs/assets//2602263.gif) |
+<hr/>
+
+
+
+
+<table>
+  <tr>
+    <td>
+      <img src="docs/assets/2602241.gif" width="300">
+    </td>
+    <td>
+      <img src="docs/assets/2602262.gif" width="300">
+    </td>
+    <td><img src="docs/assets/2602262.gif" width="300"></td>
+  </tr>
+  <tr>
+  <td>Trigger the hotkey to capture selected text</td>
+  <td>Supports multiple floating windows</td>
+  <td>With no selection, the hotkey opens a blank quick-note panel</td>
+  </tr>
+</table>
 
 ## Why AnyFloat?
 
@@ -16,12 +38,15 @@ AnyFloat is a native macOS app that captures text into always-on-top floating wi
 
 ## Quick Start
 
-1. Download the latest build from [Releases](https://github.com/fytriht/anyfloat/releases).
+1. Download from [Releases](https://github.com/fytriht/anyfloat/releases).
 2. Launch AnyFloat.
 3. Select text in any app.
 4. Press `Shift + Option + F`
-5. You can always find AnyFloat in the menu bar.
-    > <img src="docs/assets/2602261.png" width="160px"/>
+5. Done.
+   
+> You can always find AnyFloat later in the menu bar.
+> 
+> <img src="docs/assets/2602261.png" width="160px"/>
 
 ## Troubleshooting
 
