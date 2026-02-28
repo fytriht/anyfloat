@@ -10,27 +10,25 @@ into always-on-top floating windows.
 
 <hr/>
 
-<figure align="left"> 
-  <img src="docs/assets/2602241.gif" width="300">
-  <figcaption>
-    Trigger the hotkey to capture selected text
-  </figcaption>
-</figure>
 
-<figure align="right">
-  <img src="docs/assets/2602262.gif" width="300">
-  <figcaption>
-    Supports multiple floating windows
-  </figcaption>
-</figure>
 
-<figure>
-  <img src="docs/assets/2602262.gif" width="300">
-  <figcaption>
-    Trigger the hotkey to capture selected text
-  </figcaption>
-</figure>
 
+<table>
+  <tr>
+    <td>
+      <img src="docs/assets/2602241.gif" width="300">
+    </td>
+    <td>
+      <img src="docs/assets/2602262.gif" width="300">
+    </td>
+    <td><img src="docs/assets/2602262.gif" width="300"></td>
+  </tr>
+  <tr>
+  <td>Trigger the hotkey to capture selected text</td>
+  <td>Supports multiple floating windows</td>
+  <td>With no selection, the hotkey opens a blank quick-note panel</td>
+  </tr>
+</table>
 
 
 <!-- <table>
