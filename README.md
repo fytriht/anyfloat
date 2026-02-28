@@ -2,11 +2,12 @@
 
 AnyFloat is a native macOS app that captures text into always-on-top floating windows and follows you across macOS Spaces.
 
-| Feature                                                      | Preview                                                 |
-|--------------------------------------------------------------|---------------------------------------------------------|
-| Trigger the hotkey to capture selected text                  | <img src="docs/assets/2602241.gif" style="zoom: 50%"/>  |
-| Supports multiple floating windows                           | <img src="docs/assets//2602262.gif" style="zoom: 50%"/> |
-| With no selection, the hotkey opens a blank quick-note panel | <img src="docs/assets//2602263.gif" style="zoom: 50%"/> |
+
+<table>
+  <tr><td>Trigger the hotkey to capture selected text </td><td><img src="docs/assets/2602241.gif" width="300px"/></td></tr>
+  <tr><td>Supports multiple floating windows</td><td><img src="docs/assets//2602262.gif" width="300px"/></td></tr>
+  <tr><td>With no selection, the hotkey opens a blank quick-note panel</td><td><img src="docs/assets//2602263.gif" width="300px"/></td></tr>
+</table>
 
 ## Why AnyFloat?
 
