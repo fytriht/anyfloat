@@ -10,19 +10,34 @@ into always-on-top floating windows.
 
 <hr/>
 
+<figure align="left"> 
+  <img src="docs/assets/2602241.gif" width="300">
+  <figcaption>
+    Trigger the hotkey to capture selected text
+  </figcaption>
+</figure>
+
+<figure align="right">
+  <img src="docs/assets/2602262.gif" width="300">
+  <figcaption>
+    Supports multiple floating windows
+  </figcaption>
+</figure>
+
 <figure>
-  <img src="docs/assets/2602241.gif" alt="AnyFloat Screenshot" width="300">
+  <img src="docs/assets/2602262.gif" width="300">
   <figcaption>
     Trigger the hotkey to capture selected text
   </figcaption>
 </figure>
 
 
-<table>
+
+<!-- <table>
   <tr><td>Trigger the hotkey to capture selected text </td><td><img src="docs/assets/2602241.gif" width="300px"/></td></tr>
   <tr><td>Supports multiple floating windows</td><td><img src="docs/assets//2602262.gif" width="300px"/></td></tr>
   <tr><td>With no selection, the hotkey opens a blank quick-note panel</td><td><img src="docs/assets//2602263.gif" width="300px"/></td></tr>
-</table>
+</table> -->
 
 ## Why AnyFloat?
 
