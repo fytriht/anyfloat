@@ -10,6 +10,14 @@ into always-on-top floating windows.
 
 <hr/>
 
+<figure>
+  <img src="docs/assets/2602241.gif" alt="AnyFloat Screenshot" width="300">
+  <figcaption>
+    Trigger the hotkey to capture selected text
+  </figcaption>
+</figure>
+
+
 <table>
   <tr><td>Trigger the hotkey to capture selected text </td><td><img src="docs/assets/2602241.gif" width="300px"/></td></tr>
   <tr><td>Supports multiple floating windows</td><td><img src="docs/assets//2602262.gif" width="300px"/></td></tr>
