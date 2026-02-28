@@ -1,7 +1,14 @@
-# AnyFloat
+<p align="center">
+AnyFloat is a native macOS app that captures text<br/>
+into always-on-top floating windows.
+</p>
 
-AnyFloat is a native macOS app that captures text into always-on-top floating windows and follows you across macOS Spaces.
+<p align="center">
+<a href="https://github.com/fytriht/anyfloat/releases">Download from Releases</a>
+<!-- [Download from Releases](https://github.com/fytriht/anyfloat/releases) -->
+</p>
 
+<hr/>
 
 <table>
   <tr><td>Trigger the hotkey to capture selected text </td><td><img src="docs/assets/2602241.gif" width="300px"/></td></tr>
@@ -17,7 +24,7 @@ AnyFloat is a native macOS app that captures text into always-on-top floating wi
 
 ## Quick Start
 
-1. Download the latest build from [Releases](https://github.com/fytriht/anyfloat/releases).
+1. Download from [Releases](https://github.com/fytriht/anyfloat/releases).
 2. Launch AnyFloat.
 3. Select text in any app.
 4. Press `Shift + Option + F`
