@@ -398,18 +398,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panelController.onStateChanged = { [weak self] state in
             self?.updatePanelMenuItems(state: state)
         }
-        panelController.onStashWidgetClicked = { [weak self] state in
-            guard let self else { return }
-            AnalyticsManager.shared.track(
-                "stash_widget_clicked",
-                properties: [
-                    "visible_count": state.visibleCount,
-                    "stashed_count": state.stashedCount,
-                    "total_count": state.totalCount
-                ]
-            )
-            self.trackPanelsRestored(source: "stash_widget", state: state)
-        }
         updatePanelMenuItems(state: panelController.currentState)
         applyLaunchAtLoginPreferenceOnLaunch()
         scheduleHotKeyRegistration()
@@ -537,23 +525,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let state = panelController.currentState
         guard state.visibleCount > 0 else { return }
         panelController.stashAllPanels(anchorScreen: currentMouseScreen())
-        let latestState = panelController.currentState
-        AnalyticsManager.shared.track(
-            "panels_stashed",
-            properties: [
-                "source": "menuitem",
-                "visible_count": latestState.visibleCount,
-                "stashed_count": latestState.stashedCount,
-                "total_count": latestState.totalCount
-            ]
-        )
     }
 
     @objc private func handleRestoreAllPanels() {
         let state = panelController.currentState
         guard state.stashedCount > 0 else { return }
         panelController.restoreAllPanels()
-        trackPanelsRestored(source: "menuitem", state: state)
     }
 
     @objc private func handleQuit() {
@@ -733,18 +710,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         restoreAllPanelsMenuItem?.isEnabled = state.stashedCount > 0
     }
 
-    private func trackPanelsRestored(source: String, state: PanelControllerState) {
-        AnalyticsManager.shared.track(
-            "panels_restored",
-            properties: [
-                "source": source,
-                "visible_count": state.visibleCount,
-                "stashed_count": state.stashedCount,
-                "total_count": state.totalCount
-            ]
-        )
-    }
-
     private func currentMouseScreen() -> NSScreen? {
         let mouseLocation = NSEvent.mouseLocation
         return NSScreen.screens.first { $0.frame.contains(mouseLocation) } ?? NSScreen.main
@@ -855,7 +820,6 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     }
 
     var onStateChanged: ((PanelControllerState) -> Void)?
-    var onStashWidgetClicked: ((PanelControllerState) -> Void)?
     var hasVisiblePanels: Bool { currentState.visibleCount > 0 }
     var hasStashedPanels: Bool { currentState.stashedCount > 0 }
     var currentState: PanelControllerState { makePanelState() }
@@ -1339,8 +1303,6 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
         let controller = StashWidgetController { [weak self] in
             guard let self else { return }
-            let state = self.makePanelState()
-            self.onStashWidgetClicked?(state)
             self.restoreAllPanels()
         }
         stashWidgetController = controller
