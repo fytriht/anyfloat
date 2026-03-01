@@ -380,6 +380,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var hotKeyHandlerRef: EventHandlerRef?
     private let panelController = FloatingPanelController()
     private var statusItem: NSStatusItem?
+    private var stashAllPanelsMenuItem: NSMenuItem?
+    private var restoreAllPanelsMenuItem: NSMenuItem?
     private var preferencesWindowController: PreferencesWindowController?
     private var lastExternalAppPID: pid_t?
     private var hotKeyConfiguration = HotKeyConfiguration.loadFromDefaults()
@@ -393,6 +395,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         seedLastExternalAppPID()
         observeFrontmostAppChanges()
         setupStatusItem()
+        panelController.onStateChanged = { [weak self] state in
+            self?.updatePanelMenuItems(state: state)
+        }
+        panelController.onStashWidgetClicked = { [weak self] state in
+            guard let self else { return }
+            AnalyticsManager.shared.track(
+                "stash_widget_clicked",
+                properties: [
+                    "visible_count": state.visibleCount,
+                    "stashed_count": state.stashedCount,
+                    "total_count": state.totalCount
+                ]
+            )
+            self.trackPanelsRestored(source: "stash_widget", state: state)
+        }
+        updatePanelMenuItems(state: panelController.currentState)
         applyLaunchAtLoginPreferenceOnLaunch()
         scheduleHotKeyRegistration()
     }
@@ -484,6 +502,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Show Selected Text", action: #selector(handleShowSelectedText), keyEquivalent: ""))
+        let stashMenuItem = NSMenuItem(title: "Stash All Panels", action: #selector(handleStashAllPanels), keyEquivalent: "")
+        let restoreMenuItem = NSMenuItem(title: "Restore All Panels", action: #selector(handleRestoreAllPanels), keyEquivalent: "")
+        menu.addItem(stashMenuItem)
+        menu.addItem(restoreMenuItem)
+        stashAllPanelsMenuItem = stashMenuItem
+        restoreAllPanelsMenuItem = restoreMenuItem
         menu.addItem(NSMenuItem(title: "Preferences...", action: #selector(handleOpenPreferences), keyEquivalent: ","))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "About AnyFloat", action: #selector(handleOpenAbout), keyEquivalent: ""))
@@ -507,6 +531,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func handleShowSelectedText() {
         AnalyticsManager.shared.track("menu_item_clicked", properties: ["type": "show-main-window"])
         showSelectedTextPanel(source: "menuitem")
+    }
+
+    @objc private func handleStashAllPanels() {
+        let state = panelController.currentState
+        guard state.visibleCount > 0 else { return }
+        panelController.stashAllPanels(anchorScreen: currentMouseScreen())
+        let latestState = panelController.currentState
+        AnalyticsManager.shared.track(
+            "panels_stashed",
+            properties: [
+                "source": "menuitem",
+                "visible_count": latestState.visibleCount,
+                "stashed_count": latestState.stashedCount,
+                "total_count": latestState.totalCount
+            ]
+        )
+    }
+
+    @objc private func handleRestoreAllPanels() {
+        let state = panelController.currentState
+        guard state.stashedCount > 0 else { return }
+        panelController.restoreAllPanels()
+        trackPanelsRestored(source: "menuitem", state: state)
     }
 
     @objc private func handleQuit() {
@@ -680,6 +727,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
     }
+
+    private func updatePanelMenuItems(state: PanelControllerState) {
+        stashAllPanelsMenuItem?.isEnabled = state.visibleCount > 0
+        restoreAllPanelsMenuItem?.isEnabled = state.stashedCount > 0
+    }
+
+    private func trackPanelsRestored(source: String, state: PanelControllerState) {
+        AnalyticsManager.shared.track(
+            "panels_restored",
+            properties: [
+                "source": source,
+                "visible_count": state.visibleCount,
+                "stashed_count": state.stashedCount,
+                "total_count": state.totalCount
+            ]
+        )
+    }
+
+    private func currentMouseScreen() -> NSScreen? {
+        let mouseLocation = NSEvent.mouseLocation
+        return NSScreen.screens.first { $0.frame.contains(mouseLocation) } ?? NSScreen.main
+    }
 }
 
 private final class AnalyticsManager {
@@ -769,6 +838,12 @@ private final class FloatingTextContent: ObservableObject {
     }
 }
 
+struct PanelControllerState {
+    let visibleCount: Int
+    let stashedCount: Int
+    let totalCount: Int
+}
+
 final class FloatingPanelController: NSObject, NSWindowDelegate {
     private struct PanelContext {
         let panel: NSPanel
@@ -779,7 +854,17 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         var isAutoHeightEnabled: Bool
     }
 
+    var onStateChanged: ((PanelControllerState) -> Void)?
+    var onStashWidgetClicked: ((PanelControllerState) -> Void)?
+    var hasVisiblePanels: Bool { currentState.visibleCount > 0 }
+    var hasStashedPanels: Bool { currentState.stashedCount > 0 }
+    var currentState: PanelControllerState { makePanelState() }
+
     private var panelContexts: [ObjectIdentifier: PanelContext] = [:]
+    private var stashedPanelIDs: Set<ObjectIdentifier> = []
+    private var panelOrder: [ObjectIdentifier] = []
+    private var panelDisplayIDs: [ObjectIdentifier: CGDirectDisplayID] = [:]
+    private var stashWidgetController: StashWidgetController?
     private var keyMonitor: Any?
     private var preferredFontSize: CGFloat
 
@@ -795,6 +880,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     private let textHorizontalPadding: CGFloat = 32
     private let textVerticalPadding: CGFloat = 16
     private let textHeightSafetyInset: CGFloat = 36
+    private let arrangeGap: CGFloat = 12
 
     override init() {
         preferredFontSize = defaultFontSize
@@ -811,19 +897,62 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     }
 
     func show(text: String, keepUnfocusedOnOpen: Bool) {
+        pruneDanglingPanelIDs()
         let context = createPanelContext(text: text, fontSize: preferredFontSize)
         let panel = context.panel
-        panelContexts[ObjectIdentifier(panel)] = context
+        let panelID = ObjectIdentifier(panel)
+        panelContexts[panelID] = context
+        panelOrder.removeAll { $0 == panelID }
+        panelOrder.insert(panelID, at: 0)
         resetPanelSizeToDefault(panel, text: text, fontSize: preferredFontSize)
         positionPanelNearMouse(panel)
+        rememberPanelDisplayID(for: panel, panelID: panelID)
         _ = NSRunningApplication.current.activate(options: [.activateIgnoringOtherApps])
         NSApp.activate(ignoringOtherApps: true)
         panel.orderFrontRegardless()
         panel.makeKeyAndOrderFront(nil)
+        refreshStashWidget(anchorScreen: nil)
+        notifyStateChanged()
         guard keepUnfocusedOnOpen else { return }
         DispatchQueue.main.async { [weak panel] in
             panel?.makeFirstResponder(nil)
         }
+    }
+
+    func stashAllPanels(anchorScreen: NSScreen?) {
+        pruneDanglingPanelIDs()
+        let visiblePanelIDs = panelOrder.filter { panelID in
+            panelContexts[panelID] != nil && !stashedPanelIDs.contains(panelID)
+        }
+        guard !visiblePanelIDs.isEmpty else { return }
+
+        for panelID in visiblePanelIDs {
+            guard let context = panelContexts[panelID] else { continue }
+            rememberPanelDisplayID(for: context.panel, panelID: panelID)
+            context.panel.orderOut(nil)
+            stashedPanelIDs.insert(panelID)
+        }
+
+        refreshStashWidget(anchorScreen: anchorScreen)
+        notifyStateChanged()
+    }
+
+    func restoreAllPanels() {
+        pruneDanglingPanelIDs()
+        guard !stashedPanelIDs.isEmpty else { return }
+
+        let stashedOrderedPanelIDs = panelOrder.filter { panelID in
+            panelContexts[panelID] != nil && stashedPanelIDs.contains(panelID)
+        }
+        for panelID in stashedOrderedPanelIDs {
+            panelContexts[panelID]?.panel.orderFrontRegardless()
+        }
+        stashedPanelIDs.removeAll()
+
+        let allPanelIDs = panelOrder.filter { panelContexts[$0] != nil }
+        arrangePanelsAcrossScreens(panelIDs: allPanelIDs)
+        refreshStashWidget(anchorScreen: nil)
+        notifyStateChanged()
     }
 
     private func createPanelContext(text: String, fontSize: CGFloat) -> PanelContext {
@@ -984,6 +1113,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     func windowDidResize(_ notification: Notification) {
         guard let panel = notification.object as? NSPanel else { return }
         let panelID = ObjectIdentifier(panel)
+        rememberPanelDisplayID(for: panel, panelID: panelID)
         guard var context = panelContexts[panelID] else { return }
         guard context.isAutoHeightEnabled else { return }
 
@@ -993,6 +1123,12 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         context.lastContentWidth = currentContentWidth
         panelContexts[panelID] = context
         resizePanelHeightToFitText(panel, text: context.textContent.text, fontSize: context.fontSize)
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        guard let panel = notification.object as? NSPanel else { return }
+        let panelID = ObjectIdentifier(panel)
+        rememberPanelDisplayID(for: panel, panelID: panelID)
     }
 
     func windowWillStartLiveResize(_ notification: Notification) {
@@ -1008,7 +1144,13 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         guard let panel = notification.object as? NSPanel else { return }
-        panelContexts.removeValue(forKey: ObjectIdentifier(panel))
+        let panelID = ObjectIdentifier(panel)
+        panelContexts.removeValue(forKey: panelID)
+        stashedPanelIDs.remove(panelID)
+        panelOrder.removeAll { $0 == panelID }
+        panelDisplayIDs.removeValue(forKey: panelID)
+        refreshStashWidget(anchorScreen: nil)
+        notifyStateChanged()
     }
 
     private func installKeyMonitorIfNeeded() {
@@ -1104,6 +1246,364 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         panel.setFrameOrigin(NSPoint(x: originX, y: originY))
     }
 
+    private func arrangePanelsAcrossScreens(panelIDs: [ObjectIdentifier]) {
+        guard !panelIDs.isEmpty else { return }
+
+        var groupedPanelIDs: [CGDirectDisplayID: [ObjectIdentifier]] = [:]
+        var fallbackPanelIDs: [ObjectIdentifier] = []
+
+        for panelID in panelIDs {
+            guard let context = panelContexts[panelID] else { continue }
+            let panelCenter = NSPoint(x: context.panel.frame.midX, y: context.panel.frame.midY)
+            let displayID = panelDisplayIDs[panelID]
+                ?? displayID(for: context.panel.screen)
+                ?? displayID(forPoint: panelCenter)
+
+            if let displayID {
+                groupedPanelIDs[displayID, default: []].append(panelID)
+            } else {
+                fallbackPanelIDs.append(panelID)
+            }
+        }
+
+        if !fallbackPanelIDs.isEmpty {
+            if let fallbackDisplayID = displayID(for: NSScreen.main ?? NSScreen.screens.first) {
+                groupedPanelIDs[fallbackDisplayID, default: []].append(contentsOf: fallbackPanelIDs)
+            } else if let fallbackScreen = NSScreen.main ?? NSScreen.screens.first {
+                arrangePanels(panelIDs: fallbackPanelIDs, on: fallbackScreen)
+            }
+        }
+
+        for screen in NSScreen.screens {
+            guard
+                let screenDisplayID = displayID(for: screen),
+                let ids = groupedPanelIDs.removeValue(forKey: screenDisplayID)
+            else { continue }
+            arrangePanels(panelIDs: ids, on: screen)
+        }
+
+        if !groupedPanelIDs.isEmpty, let fallbackScreen = NSScreen.main ?? NSScreen.screens.first {
+            for (_, ids) in groupedPanelIDs {
+                arrangePanels(panelIDs: ids, on: fallbackScreen)
+            }
+        }
+    }
+
+    private func arrangePanels(panelIDs: [ObjectIdentifier], on screen: NSScreen) {
+        guard !panelIDs.isEmpty else { return }
+
+        let layoutFrame = screen.visibleFrame
+        guard layoutFrame.width > 0, layoutFrame.height > 0 else { return }
+
+        // Right-anchored column layout: top -> bottom, preserving each panel's original size.
+        var currentRightEdgeX = layoutFrame.maxX
+        var currentTopY = layoutFrame.maxY
+        var currentColumnMaxWidth: CGFloat = 0
+
+        for panelID in panelIDs {
+            guard let context = panelContexts[panelID] else { continue }
+            let panel = context.panel
+            let panelSize = panel.frame.size
+
+            var candidateY = currentTopY - panelSize.height
+            if candidateY < layoutFrame.minY {
+                // Start a new column on the left when current column runs out of vertical space.
+                currentRightEdgeX -= (currentColumnMaxWidth + arrangeGap)
+                currentTopY = layoutFrame.maxY
+                currentColumnMaxWidth = 0
+                candidateY = currentTopY - panelSize.height
+            }
+
+            // Keep the right edge attached to the screen edge for the rightmost column.
+            var candidateX = currentRightEdgeX - panelSize.width
+            let minAllowedX = layoutFrame.minX
+            if candidateX < minAllowedX {
+                candidateX = minAllowedX
+            }
+            if candidateY < layoutFrame.minY {
+                candidateY = layoutFrame.minY
+            }
+
+            panel.setFrameOrigin(NSPoint(x: candidateX, y: candidateY))
+            rememberPanelDisplayID(for: panel, panelID: panelID)
+
+            currentTopY = candidateY - arrangeGap
+            currentColumnMaxWidth = max(currentColumnMaxWidth, panelSize.width)
+        }
+    }
+
+    private func ensureStashWidgetController() -> StashWidgetController {
+        if let stashWidgetController {
+            return stashWidgetController
+        }
+
+        let controller = StashWidgetController { [weak self] in
+            guard let self else { return }
+            let state = self.makePanelState()
+            self.onStashWidgetClicked?(state)
+            self.restoreAllPanels()
+        }
+        stashWidgetController = controller
+        return controller
+    }
+
+    private func refreshStashWidget(anchorScreen: NSScreen?) {
+        let stashedCount = stashedPanelIDs.count
+        guard stashedCount > 0 else {
+            stashWidgetController?.hide()
+            return
+        }
+        let controller = ensureStashWidgetController()
+        controller.show(hiddenCount: stashedCount, anchorScreen: anchorScreen)
+    }
+
+    private func notifyStateChanged() {
+        onStateChanged?(makePanelState())
+    }
+
+    private func makePanelState() -> PanelControllerState {
+        pruneDanglingPanelIDs()
+        let visibleCount = panelOrder.filter { panelID in
+            guard let context = panelContexts[panelID], !stashedPanelIDs.contains(panelID) else { return false }
+            return context.panel.isVisible
+        }.count
+        return PanelControllerState(
+            visibleCount: visibleCount,
+            stashedCount: stashedPanelIDs.count,
+            totalCount: panelContexts.count
+        )
+    }
+
+    private func pruneDanglingPanelIDs() {
+        let existingIDs = Set(panelContexts.keys)
+        stashedPanelIDs.formIntersection(existingIDs)
+        panelOrder = panelOrder.filter { existingIDs.contains($0) }
+        panelDisplayIDs = panelDisplayIDs.filter { existingIDs.contains($0.key) }
+    }
+
+    private func rememberPanelDisplayID(for panel: NSPanel, panelID: ObjectIdentifier) {
+        let panelCenter = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
+        if let id = displayID(for: panel.screen) ?? displayID(forPoint: panelCenter) {
+            panelDisplayIDs[panelID] = id
+        }
+    }
+
+    private func displayID(for screen: NSScreen?) -> CGDirectDisplayID? {
+        guard
+            let screen,
+            let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+        else {
+            return nil
+        }
+        return CGDirectDisplayID(number.uint32Value)
+    }
+
+    private func displayID(forPoint point: NSPoint) -> CGDirectDisplayID? {
+        let screen = NSScreen.screens.first { $0.frame.contains(point) } ?? NSScreen.main
+        return displayID(for: screen)
+    }
+}
+
+private final class StashWidgetPanel: NSPanel {
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+}
+
+private final class StashWidgetController {
+    private let widgetSize = NSSize(width: 100, height: 44)
+    private let edgeMargin: CGFloat = 16
+    private let onActivate: () -> Void
+
+    private var panel: StashWidgetPanel?
+    private var hostingView: NSHostingView<StashWidgetView>?
+    private var hasPositionedPanel = false
+
+    init(onActivate: @escaping () -> Void) {
+        self.onActivate = onActivate
+    }
+
+    func show(hiddenCount: Int, anchorScreen: NSScreen?) {
+        guard hiddenCount > 0 else {
+            hide()
+            return
+        }
+
+        let panel = ensurePanel(hiddenCount: hiddenCount)
+        hostingView?.rootView = StashWidgetView(hiddenCount: hiddenCount, onActivate: onActivate)
+        constrain(panel: panel, anchorScreen: anchorScreen)
+        panel.orderFrontRegardless()
+    }
+
+    func hide() {
+        panel?.orderOut(nil)
+    }
+
+    private func ensurePanel(hiddenCount: Int) -> StashWidgetPanel {
+        if let panel {
+            return panel
+        }
+
+        let panel = StashWidgetPanel(
+            contentRect: NSRect(origin: .zero, size: widgetSize),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isFloatingPanel = true
+        panel.level = .floating
+        panel.hidesOnDeactivate = false
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.isMovableByWindowBackground = false
+        panel.setFrame(NSRect(origin: .zero, size: widgetSize), display: true)
+
+        let hostingView = NSHostingView(rootView: StashWidgetView(hiddenCount: hiddenCount, onActivate: onActivate))
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        panel.contentView = hostingView
+
+        self.panel = panel
+        self.hostingView = hostingView
+        return panel
+    }
+
+    private func constrain(panel: NSPanel, anchorScreen: NSScreen?) {
+        let visibleFrame = targetVisibleFrame(for: panel, anchorScreen: anchorScreen)
+        guard !visibleFrame.isEmpty else { return }
+
+        var frame = panel.frame
+        frame.size = widgetSize
+
+        if !hasPositionedPanel {
+            frame.origin.x = visibleFrame.maxX - widgetSize.width - edgeMargin
+            frame.origin.y = visibleFrame.maxY - widgetSize.height - edgeMargin
+            hasPositionedPanel = true
+        }
+
+        let minX = visibleFrame.minX
+        let maxX = visibleFrame.maxX - frame.width
+        let minY = visibleFrame.minY
+        let maxY = visibleFrame.maxY - frame.height
+        frame.origin.x = min(max(frame.origin.x, minX), maxX)
+        frame.origin.y = min(max(frame.origin.y, minY), maxY)
+        panel.setFrame(frame, display: true)
+    }
+
+    private func targetVisibleFrame(for panel: NSPanel, anchorScreen: NSScreen?) -> NSRect {
+        if let anchorScreen {
+            return anchorScreen.visibleFrame
+        }
+        let center = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
+        if let screen = NSScreen.screens.first(where: { $0.frame.contains(center) }) {
+            return screen.visibleFrame
+        }
+        return NSScreen.main?.visibleFrame ?? .zero
+    }
+}
+
+private struct StashWidgetView: View {
+    let hiddenCount: Int
+    let onActivate: () -> Void
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(NSColor.windowBackgroundColor).opacity(0.96))
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color(NSColor.separatorColor), lineWidth: 1)
+
+            HStack(spacing: 8) {
+                Image(systemName: "rectangle.stack.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Color(NSColor.secondaryLabelColor))
+                Text("\(hiddenCount) stashed")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(Color(NSColor.labelColor))
+            }
+
+            StashWidgetInteractionHandle(onActivate: onActivate)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(width: 100, height: 44)
+    }
+}
+
+private struct StashWidgetInteractionHandle: NSViewRepresentable {
+    let onActivate: () -> Void
+
+    func makeNSView(context: Context) -> InteractionView {
+        InteractionView(onActivate: onActivate)
+    }
+
+    func updateNSView(_ nsView: InteractionView, context: Context) {
+        nsView.onActivate = onActivate
+    }
+
+    final class InteractionView: NSView {
+        var onActivate: () -> Void
+        private let dragThreshold: CGFloat = 4
+        private var mouseDownLocation: NSPoint?
+        private var windowOriginAtMouseDown: NSPoint = .zero
+        private var didDrag = false
+
+        init(onActivate: @escaping () -> Void) {
+            self.onActivate = onActivate
+            super.init(frame: .zero)
+            wantsLayer = true
+            layer?.backgroundColor = NSColor.clear.cgColor
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+            true
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            mouseDownLocation = NSEvent.mouseLocation
+            windowOriginAtMouseDown = window?.frame.origin ?? .zero
+            didDrag = false
+        }
+
+        override func mouseDragged(with event: NSEvent) {
+            guard let window, let start = mouseDownLocation else { return }
+            let current = NSEvent.mouseLocation
+            let deltaX = current.x - start.x
+            let deltaY = current.y - start.y
+            if !didDrag {
+                didDrag = hypot(deltaX, deltaY) >= dragThreshold
+            }
+            guard didDrag else { return }
+            window.setFrameOrigin(
+                NSPoint(
+                    x: windowOriginAtMouseDown.x + deltaX,
+                    y: windowOriginAtMouseDown.y + deltaY
+                )
+            )
+        }
+
+        override func mouseUp(with event: NSEvent) {
+            defer {
+                mouseDownLocation = nil
+                didDrag = false
+            }
+            guard !didDrag else { return }
+            if let start = mouseDownLocation {
+                let end = NSEvent.mouseLocation
+                let distance = hypot(end.x - start.x, end.y - start.y)
+                if distance >= dragThreshold {
+                    return
+                }
+            }
+            if window != nil {
+                onActivate()
+            }
+        }
+    }
 }
 
 private struct FloatingTextView: View {
