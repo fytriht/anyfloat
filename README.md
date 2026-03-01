@@ -10,9 +10,6 @@ into always-on-top floating windows.
 
 <hr/>
 
-
-
-
 <table>
   <tr>
     <td>
@@ -48,14 +45,17 @@ into always-on-top floating windows.
 > 
 > <img src="docs/assets/2602261.png" width="160px"/>
 
-## Troubleshooting
+## FAQ
 
+- Why does AnyFloat need Accessibility permission?
+  - To capture selected text across apps. macOS requires this for cross-app UI access and the `Cmd + C` compatibility fallback.
+  - Without it, floating windows still work, but text capture may fail.
 - Hotkey does not trigger:
-  - Check shortcut conflicts with other tools
-  - Relaunch AnyFloat
+  - Check shortcut conflicts with other tools.
+  - Relaunch AnyFloat.
 - Selected text is not captured in some apps:
-  - Confirm Accessibility permission is enabled for `AnyFloat`
-  - If you just granted Accessibility permission, relaunch AnyFloat once.
+  - Confirm Accessibility permission is enabled for `AnyFloat`.
+  - If you just granted permission, relaunch AnyFloat once.
 
 ## Contributing
 
