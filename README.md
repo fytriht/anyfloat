@@ -18,7 +18,7 @@ into always-on-top floating windows.
     <td>
       <img src="docs/assets/2602262.gif" width="300">
     </td>
-    <td><img src="docs/assets/2602262.gif" width="300"></td>
+    <td><img src="docs/assets/2602263.gif" width="300"></td>
   </tr>
   <tr>
   <td>Trigger the hotkey to capture selected text</td>
