@@ -21,26 +21,21 @@ This file defines repository-specific instructions for coding agents working in 
   - Release: `./.build-xcode/Build/Products/Release/AnyFloat.app/Contents/MacOS/AnyFloat`
 - Package app bundle: `./scripts/package_app.sh`
 
-Before finishing code changes, agents should run at least:
-1. `xcodebuild -project AnyFloat.xcodeproj -scheme AnyFloat -configuration Debug -derivedDataPath .build-xcode build CODE_SIGNING_ALLOWED=NO`
-2. If packaging-related files changed: `./scripts/package_app.sh`
+Before finishing changes, run verification only when relevant:
+1. If app code, project config, or build scripts changed, run: `xcodebuild -project AnyFloat.xcodeproj -scheme AnyFloat -configuration Debug -derivedDataPath .build-xcode build CODE_SIGNING_ALLOWED=NO`
+2. If packaging-related files changed, run: `./scripts/package_app.sh`
+3. If only documentation/non-executable files changed (for example, `.md`), build verification can be skipped.
 
 ## Coding Guidelines
 - Prefer minimal, targeted edits.
 - Keep behavior consistent with existing hotkey / menu bar / AX text extraction flow unless change is requested.
 - Avoid introducing new dependencies unless necessary.
-- Follow existing Swift style in `AnyFloatApp.swift`:
-  - clear naming
-  - small focused helpers
-  - explicit fallbacks for AX/clipboard behavior
 
 ## Safety Rules
 - Do not use destructive git commands (for example `git reset --hard`) unless explicitly requested.
 - Do not revert unrelated local changes.
-- Do not modify signing identity logic in packaging unless required by task.
 
 ## Documentation Sync
-- Update `README.md` whenever code changes affect features, setup, build/run commands, configuration, or known limitations.
 - Update `AGENTS.md` whenever repository workflow or agent collaboration rules change.
 - Before finishing a task, verify docs are in sync; if documentation-impacting behavior changed, doc updates are required.
 
