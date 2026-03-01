@@ -36,6 +36,7 @@ Before finishing changes, run verification only when relevant:
 - Prefer minimal, targeted edits.
 - Keep behavior consistent with existing hotkey / menu bar / AX text extraction flow unless change is requested.
 - Avoid introducing new dependencies unless necessary.
+- Do not add new analytics tracking events unless explicitly requested.
 
 ## Safety Rules
 - Do not use destructive git commands (for example `git reset --hard`) unless explicitly requested.
