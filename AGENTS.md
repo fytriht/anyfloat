@@ -5,6 +5,12 @@ This file defines repository-specific instructions for coding agents working in 
 ## Project Summary
 - App type: native macOS menu bar app (Xcode project).
 - Main entry: `Sources/AnyFloatApp/AnyFloatApp.swift`.
+  - `AnyFloatApp`: SwiftUI entry; forwards About / Preferences commands to `AppDelegate`.
+  - `AppDelegate`: app lifecycle, status bar menu, global hotkey, accessibility prompt, launch-at-login.
+  - Hotkey + preferences (`HotKeyConfiguration`, `HotKeyRecorderView`, `PreferencesWindowController`): shortcut validation/persistence and Preferences UI.
+  - Floating panel (`FloatingPanelController`, `FloatingBorderlessPanel`, `FloatingTextView`): floating window creation, positioning, and text sizing behavior.
+  - AX text reader (`SelectedTextReader`): gets selected text from the frontmost external app.
+  - Analytics (`AnalyticsManager`): Mixpanel setup and core event tracking.
 - Xcode project: `AnyFloat.xcodeproj`.
 - Packaging script: `scripts/package_app.sh`.
 
