@@ -5,15 +5,13 @@ Thanks for contributing to AnyFloat.
 ## Development Environment
 
 - macOS 13+
-- Xcode Command Line Tools (`swift` available)
-- Full Xcode app selected for packaging (`xcodebuild` is used by `scripts/package_app.sh`)
+- Full Xcode app selected for `xcodebuild` (used for build and packaging)
 
 ## Project Structure
 
 ```text
 Sources/AnyFloatApp/AnyFloatApp.swift   # app entry, hotkey, AX reader, floating panel
 scripts/package_app.sh                  # archive/export/signing (+ optional dmg)
-Package.swift                           # SwiftPM manifest
 AnyFloat.xcodeproj                      # Xcode project
 ```
 
@@ -22,13 +20,23 @@ AnyFloat.xcodeproj                      # Xcode project
 Debug build:
 
 ```bash
-swift build
+xcodebuild -project AnyFloat.xcodeproj -scheme AnyFloat -configuration Debug -derivedDataPath .build-xcode build CODE_SIGNING_ALLOWED=NO
 ```
 
 Release build:
 
 ```bash
-swift build -c release
+xcodebuild -project AnyFloat.xcodeproj -scheme AnyFloat -configuration Release -derivedDataPath .build-xcode build CODE_SIGNING_ALLOWED=NO
+```
+
+Run built binary:
+
+```bash
+# Debug
+./.build-xcode/Build/Products/Debug/AnyFloat.app/Contents/MacOS/AnyFloat
+
+# Release
+./.build-xcode/Build/Products/Release/AnyFloat.app/Contents/MacOS/AnyFloat
 ```
 
 Run with Xcode:
@@ -73,7 +81,7 @@ Default outputs are under `dist/`.
 
 At minimum, run:
 
-1. `swift build`
+1. `xcodebuild -project AnyFloat.xcodeproj -scheme AnyFloat -configuration Debug -derivedDataPath .build-xcode build CODE_SIGNING_ALLOWED=NO`
 2. `./scripts/package_app.sh` if packaging-related files changed
 
 If behavior changes, add/update docs accordingly.
@@ -92,6 +100,6 @@ If behavior changes, add/update docs accordingly.
 ## Pull Request Checklist
 
 - [ ] Scope is focused and avoids unrelated refactors
-- [ ] Build succeeds (`swift build`)
+- [ ] Build succeeds (`xcodebuild -project AnyFloat.xcodeproj -scheme AnyFloat -configuration Debug -derivedDataPath .build-xcode build CODE_SIGNING_ALLOWED=NO`)
 - [ ] Packaging verified if relevant (`./scripts/package_app.sh`)
 - [ ] Documentation updated when needed

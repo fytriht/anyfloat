@@ -3,24 +3,26 @@
 This file defines repository-specific instructions for coding agents working in `AnyFloat`.
 
 ## Project Summary
-- App type: native macOS menu bar app (SwiftPM + Xcode project).
+- App type: native macOS menu bar app (Xcode project).
 - Main entry: `Sources/AnyFloatApp/AnyFloatApp.swift`.
-- Package manifest: `Package.swift`.
+- Xcode project: `AnyFloat.xcodeproj`.
 - Packaging script: `scripts/package_app.sh`.
 
 ## Environment
-- Required: macOS 13+, Xcode Command Line Tools (`swift` available).
-- Required for packaging: full Xcode app selected for `xcodebuild`.
+- Required: macOS 13+.
+- Required for build and packaging: full Xcode app selected for `xcodebuild`.
 - Keep cache/temp artifacts inside repo when possible (see `scripts/package_app.sh`).
 
 ## Build, Run, Verify
-- Debug build: `swift build`
-- Release build: `swift build -c release`
-- Run release binary: `./.build/release/AnyFloat`
+- Debug build: `xcodebuild -project AnyFloat.xcodeproj -scheme AnyFloat -configuration Debug -derivedDataPath .build-xcode build CODE_SIGNING_ALLOWED=NO`
+- Release build: `xcodebuild -project AnyFloat.xcodeproj -scheme AnyFloat -configuration Release -derivedDataPath .build-xcode build CODE_SIGNING_ALLOWED=NO`
+- Run built binary:
+  - Debug: `./.build-xcode/Build/Products/Debug/AnyFloat.app/Contents/MacOS/AnyFloat`
+  - Release: `./.build-xcode/Build/Products/Release/AnyFloat.app/Contents/MacOS/AnyFloat`
 - Package app bundle: `./scripts/package_app.sh`
 
 Before finishing code changes, agents should run at least:
-1. `swift build`
+1. `xcodebuild -project AnyFloat.xcodeproj -scheme AnyFloat -configuration Debug -derivedDataPath .build-xcode build CODE_SIGNING_ALLOWED=NO`
 2. If packaging-related files changed: `./scripts/package_app.sh`
 
 ## Coding Guidelines
