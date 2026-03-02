@@ -1063,6 +1063,13 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
                 let panelID = ObjectIdentifier(panel)
                 guard let context = self.panelContexts[panelID], context.isAutoHeightEnabled else { return }
                 self.resizePanelHeightToFitText(panel, text: updatedText, fontSize: context.fontSize)
+            },
+            onClosePanel: { [weak panel] in
+                panel?.close()
+            },
+            onStashAllPanels: { [weak self, weak panel] in
+                guard let self else { return }
+                self.stashAllPanels(anchorScreen: panel?.screen)
             }
         )
     }
@@ -1619,6 +1626,8 @@ private struct FloatingTextView: View {
     @ObservedObject var textContent: FloatingTextContent
     let fontSize: CGFloat
     let onTextChange: (String) -> Void
+    let onClosePanel: () -> Void
+    let onStashAllPanels: () -> Void
     private let cornerRadius: CGFloat = 16
     private let topBarHeight: CGFloat = 36
     private let edgeDragThickness: CGFloat = 12
@@ -1657,9 +1666,7 @@ private struct FloatingTextView: View {
         ZStack(alignment: .leading) {
             WindowDragHandle()
             HStack {
-                DrawnCloseButton {
-                    NSApp.keyWindow?.close()
-                }
+                DrawnCloseButton(primaryAction: onClosePanel, alternateAction: onStashAllPanels)
                 Spacer()
             }
             .padding(.horizontal, 12)
@@ -1700,26 +1707,92 @@ private struct WindowDragHandle: NSViewRepresentable {
 private struct DrawnCloseButton: View {
     private let size: CGFloat = 14
     private let iconSize: CGFloat = 5
+    private let buttonBaseColor = Color(NSColor(calibratedWhite: 0.45, alpha: 1))
     @State private var isHovered = false
-    let action: () -> Void
+    @State private var isOptionPressed = false
+    @State private var flagsMonitor: Any?
+    let primaryAction: () -> Void
+    let alternateAction: () -> Void
+
+    private var isAlternateMode: Bool {
+        isHovered && isOptionPressed
+    }
+
+    private var tooltipText: String {
+        if isAlternateMode {
+            return "Stash All Panels"
+        }
+        return "Close Panel (Hold Option to Stash All Panels)"
+    }
 
     var body: some View {
-        Button(action: action) {
+        Button(action: handleTap) {
             ZStack {
                 Circle()
-                    .fill(Color(NSColor(calibratedWhite: 0.45, alpha: 1)))
-                DrawnXMark()
-                    .stroke(Color.white.opacity(0.95), style: StrokeStyle(lineWidth: 1, lineCap: .round))
-                    .frame(width: iconSize, height: iconSize)
-                    .opacity(isHovered ? 1 : 0)
+                    .fill(buttonColor)
+                if isAlternateMode {
+                    Image(systemName: "rectangle.stack.fill")
+                        .font(.system(size: iconSize + 1, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.95))
+                        .opacity(isHovered ? 1 : 0)
+                } else {
+                    DrawnXMark()
+                        .stroke(Color.white.opacity(0.95), style: StrokeStyle(lineWidth: 1, lineCap: .round, lineJoin: .round))
+                        .frame(width: iconSize, height: iconSize)
+                        .opacity(isHovered ? 1 : 0)
+                }
             }
             .frame(width: size, height: size)
         }
         .buttonStyle(.plain)
+        .help(tooltipText)
         .onHover { hovering in
             isHovered = hovering
+            if hovering {
+                beginOptionMonitoring()
+            } else {
+                endOptionMonitoring()
+            }
         }
-        .accessibilityLabel("Close panel")
+        .onDisappear {
+            endOptionMonitoring()
+        }
+        .accessibilityLabel(isAlternateMode ? "Stash all panels" : "Close panel")
+    }
+
+    private var buttonColor: Color {
+        buttonBaseColor
+    }
+
+    private func handleTap() {
+        if isAlternateMode {
+            alternateAction()
+            return
+        }
+        primaryAction()
+    }
+
+    private func beginOptionMonitoring() {
+        syncOptionPressedState()
+        guard flagsMonitor == nil else { return }
+        flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            isOptionPressed = modifiers.contains(.option)
+            return event
+        }
+    }
+
+    private func endOptionMonitoring() {
+        if let flagsMonitor {
+            NSEvent.removeMonitor(flagsMonitor)
+            self.flagsMonitor = nil
+        }
+        isOptionPressed = false
+    }
+
+    private func syncOptionPressedState() {
+        let modifiers = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        isOptionPressed = modifiers.contains(.option)
     }
 }
 
