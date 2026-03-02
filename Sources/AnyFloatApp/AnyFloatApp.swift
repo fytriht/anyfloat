@@ -1552,12 +1552,11 @@ private struct StashWidgetInteractionHandle: NSViewRepresentable {
                 didDrag = hypot(deltaX, deltaY) >= dragThreshold
             }
             guard didDrag else { return }
-            window.setFrameOrigin(
-                NSPoint(
-                    x: windowOriginAtMouseDown.x + deltaX,
-                    y: windowOriginAtMouseDown.y + deltaY
-                )
+            let proposedOrigin = NSPoint(
+                x: windowOriginAtMouseDown.x + deltaX,
+                y: windowOriginAtMouseDown.y + deltaY
             )
+            window.setFrameOrigin(clampedOrigin(for: window, proposedOrigin: proposedOrigin))
         }
 
         override func mouseUp(with event: NSEvent) {
@@ -1565,7 +1564,12 @@ private struct StashWidgetInteractionHandle: NSViewRepresentable {
                 mouseDownLocation = nil
                 didDrag = false
             }
-            guard !didDrag else { return }
+            if didDrag {
+                if let window {
+                    window.setFrameOrigin(clampedOrigin(for: window, proposedOrigin: window.frame.origin))
+                }
+                return
+            }
             if let start = mouseDownLocation {
                 let end = NSEvent.mouseLocation
                 let distance = hypot(end.x - start.x, end.y - start.y)
@@ -1576,6 +1580,37 @@ private struct StashWidgetInteractionHandle: NSViewRepresentable {
             if window != nil {
                 onActivate()
             }
+        }
+
+        private func clampedOrigin(for window: NSWindow, proposedOrigin: NSPoint) -> NSPoint {
+            var proposedFrame = window.frame
+            proposedFrame.origin = proposedOrigin
+
+            let visibleFrame = targetVisibleFrame(for: window, proposedFrame: proposedFrame)
+            guard !visibleFrame.isEmpty else { return proposedOrigin }
+
+            let minX = visibleFrame.minX
+            let maxX = max(minX, visibleFrame.maxX - proposedFrame.width)
+            let minY = visibleFrame.minY
+            let maxY = max(minY, visibleFrame.maxY - proposedFrame.height)
+            return NSPoint(
+                x: min(max(proposedOrigin.x, minX), maxX),
+                y: min(max(proposedOrigin.y, minY), maxY)
+            )
+        }
+
+        private func targetVisibleFrame(for window: NSWindow, proposedFrame: NSRect) -> NSRect {
+            let proposedCenter = NSPoint(x: proposedFrame.midX, y: proposedFrame.midY)
+            if let screen = NSScreen.screens.first(where: { $0.frame.contains(proposedCenter) }) {
+                return screen.visibleFrame
+            }
+
+            let mouseLocation = NSEvent.mouseLocation
+            if let screen = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) }) {
+                return screen.visibleFrame
+            }
+
+            return window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
         }
     }
 }
