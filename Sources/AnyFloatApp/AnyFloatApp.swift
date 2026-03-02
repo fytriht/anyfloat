@@ -803,7 +803,7 @@ private final class FloatingTextContent: ObservableObject {
     }
 }
 
-struct PanelControllerState {
+fileprivate struct PanelControllerState {
     let visibleCount: Int
     let stashedCount: Int
     let totalCount: Int
@@ -819,10 +819,10 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         var isAutoHeightEnabled: Bool
     }
 
-    var onStateChanged: ((PanelControllerState) -> Void)?
+    fileprivate var onStateChanged: ((PanelControllerState) -> Void)?
     var hasVisiblePanels: Bool { currentState.visibleCount > 0 }
     var hasStashedPanels: Bool { currentState.stashedCount > 0 }
-    var currentState: PanelControllerState { makePanelState() }
+    fileprivate var currentState: PanelControllerState { makePanelState() }
 
     private var panelContexts: [ObjectIdentifier: PanelContext] = [:]
     private var stashedPanelIDs: Set<ObjectIdentifier> = []
@@ -1372,7 +1372,8 @@ private final class StashWidgetPanel: NSPanel {
 }
 
 private final class StashWidgetController {
-    private let widgetSize = NSSize(width: 100, height: 44)
+    private static let defaultWidgetSize = NSSize(width: 100, height: 44)
+    private let widgetSize = StashWidgetController.defaultWidgetSize
     private let edgeMargin: CGFloat = 16
     private let onActivate: () -> Void
 
@@ -1391,7 +1392,11 @@ private final class StashWidgetController {
         }
 
         let panel = ensurePanel(hiddenCount: hiddenCount)
-        hostingView?.rootView = StashWidgetView(hiddenCount: hiddenCount, onActivate: onActivate)
+        hostingView?.rootView = StashWidgetView(
+            hiddenCount: hiddenCount,
+            onActivate: onActivate,
+            widgetSize: widgetSize
+        )
         constrain(panel: panel, anchorScreen: anchorScreen)
         panel.orderFrontRegardless()
     }
@@ -1421,7 +1426,13 @@ private final class StashWidgetController {
         panel.isMovableByWindowBackground = false
         panel.setFrame(NSRect(origin: .zero, size: widgetSize), display: true)
 
-        let hostingView = NSHostingView(rootView: StashWidgetView(hiddenCount: hiddenCount, onActivate: onActivate))
+        let hostingView = NSHostingView(
+            rootView: StashWidgetView(
+                hiddenCount: hiddenCount,
+                onActivate: onActivate,
+                widgetSize: widgetSize
+            )
+        )
         hostingView.translatesAutoresizingMaskIntoConstraints = false
         panel.contentView = hostingView
 
@@ -1467,6 +1478,7 @@ private final class StashWidgetController {
 private struct StashWidgetView: View {
     let hiddenCount: Int
     let onActivate: () -> Void
+    let widgetSize: NSSize
 
     var body: some View {
         ZStack {
@@ -1487,7 +1499,7 @@ private struct StashWidgetView: View {
             StashWidgetInteractionHandle(onActivate: onActivate)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: 100, height: 44)
+        .frame(width: widgetSize.width, height: widgetSize.height)
     }
 }
 
