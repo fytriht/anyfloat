@@ -1665,8 +1665,10 @@ private struct FloatingTextView: View {
     private var topBar: some View {
         ZStack(alignment: .leading) {
             WindowDragHandle()
-            HStack {
-                DrawnCloseButton(primaryAction: onClosePanel, alternateAction: onStashAllPanels)
+            HStack(spacing: 6) {
+                DrawnCloseButton(action: onClosePanel)
+                DrawnStashAllButton(action: onStashAllPanels)
+                DrawnPlaceholderButton()
                 Spacer()
             }
             .padding(.horizontal, 12)
@@ -1707,92 +1709,93 @@ private struct WindowDragHandle: NSViewRepresentable {
 private struct DrawnCloseButton: View {
     private let size: CGFloat = 14
     private let iconSize: CGFloat = 5
-    private let buttonBaseColor = Color(NSColor(calibratedWhite: 0.45, alpha: 1))
+    private let buttonWhite: CGFloat = 0.35
+    private let defaultAlpha: CGFloat = 0.58
+    private let hoverAlpha: CGFloat = 0.78
     @State private var isHovered = false
-    @State private var isOptionPressed = false
-    @State private var flagsMonitor: Any?
-    let primaryAction: () -> Void
-    let alternateAction: () -> Void
-
-    private var isAlternateMode: Bool {
-        isHovered && isOptionPressed
-    }
-
-    private var tooltipText: String {
-        if isAlternateMode {
-            return "Stash All Panels"
-        }
-        return "Close Panel (Hold Option to Stash All Panels)"
-    }
+    let action: () -> Void
 
     var body: some View {
-        Button(action: handleTap) {
+        Button(action: action) {
             ZStack {
                 Circle()
                     .fill(buttonColor)
-                if isAlternateMode {
-                    Image(systemName: "rectangle.stack.fill")
-                        .font(.system(size: iconSize + 1, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.95))
-                        .opacity(isHovered ? 1 : 0)
-                } else {
-                    DrawnXMark()
-                        .stroke(Color.white.opacity(0.95), style: StrokeStyle(lineWidth: 1, lineCap: .round, lineJoin: .round))
-                        .frame(width: iconSize, height: iconSize)
-                        .opacity(isHovered ? 1 : 0)
-                }
+                DrawnXMark()
+                    .stroke(Color.white.opacity(0.95), style: StrokeStyle(lineWidth: 1, lineCap: .round, lineJoin: .round))
+                    .frame(width: iconSize, height: iconSize)
+                    .opacity(isHovered ? 1 : 0)
             }
             .frame(width: size, height: size)
         }
         .buttonStyle(.plain)
-        .help(tooltipText)
+        .help("Close Panel")
         .onHover { hovering in
             isHovered = hovering
-            if hovering {
-                beginOptionMonitoring()
-            } else {
-                endOptionMonitoring()
-            }
         }
-        .onDisappear {
-            endOptionMonitoring()
-        }
-        .accessibilityLabel(isAlternateMode ? "Stash all panels" : "Close panel")
+        .accessibilityLabel("Close panel")
     }
 
     private var buttonColor: Color {
-        buttonBaseColor
+        Color(NSColor(calibratedWhite: buttonWhite, alpha: isHovered ? hoverAlpha : defaultAlpha))
     }
+}
 
-    private func handleTap() {
-        if isAlternateMode {
-            alternateAction()
-            return
+private struct DrawnStashAllButton: View {
+    private let size: CGFloat = 14
+    private let iconSize: CGFloat = 5
+    private let buttonWhite: CGFloat = 0.45
+    private let defaultAlpha: CGFloat = 0.58
+    private let hoverAlpha: CGFloat = 0.78
+    @State private var isHovered = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(buttonColor)
+                Image(systemName: "rectangle.stack.fill")
+                    .font(.system(size: iconSize + 1, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.95))
+                    .opacity(isHovered ? 1 : 0)
+            }
+            .frame(width: size, height: size)
         }
-        primaryAction()
-    }
-
-    private func beginOptionMonitoring() {
-        syncOptionPressedState()
-        guard flagsMonitor == nil else { return }
-        flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
-            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            isOptionPressed = modifiers.contains(.option)
-            return event
+        .buttonStyle(.plain)
+        .help("Stash All Panels")
+        .onHover { hovering in
+            isHovered = hovering
         }
+        .accessibilityLabel("Stash all panels")
     }
 
-    private func endOptionMonitoring() {
-        if let flagsMonitor {
-            NSEvent.removeMonitor(flagsMonitor)
-            self.flagsMonitor = nil
+    private var buttonColor: Color {
+        Color(NSColor(calibratedWhite: buttonWhite, alpha: isHovered ? hoverAlpha : defaultAlpha))
+    }
+}
+
+private struct DrawnPlaceholderButton: View {
+    private let size: CGFloat = 14
+    private let buttonWhite: CGFloat = 0.55
+    private let defaultAlpha: CGFloat = 0.58
+    private let hoverAlpha: CGFloat = 0.78
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: {}) {
+            Circle()
+                .fill(buttonColor)
+                .frame(width: size, height: size)
         }
-        isOptionPressed = false
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .accessibilityLabel("Placeholder button")
     }
 
-    private func syncOptionPressedState() {
-        let modifiers = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        isOptionPressed = modifiers.contains(.option)
+    private var buttonColor: Color {
+        Color(NSColor(calibratedWhite: buttonWhite, alpha: isHovered ? hoverAlpha : defaultAlpha))
     }
 }
 
