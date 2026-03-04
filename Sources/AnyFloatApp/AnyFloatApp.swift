@@ -405,7 +405,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         unregisterHotKey()
+        AnalyticsManager.shared.track("app_quit", properties: ["axTrusted": AXIsProcessTrusted() ? 1 : 0])
         AnalyticsManager.shared.flush()
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let state = panelController.currentState
+        guard state.totalCount > 0 else {
+            return .terminateNow
+        }
+
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Quit AnyFloat?"
+        alert.informativeText = quitConfirmationText(for: state)
+        alert.addButton(withTitle: "Cancel")
+        let quitButton = alert.addButton(withTitle: "Quit")
+        quitButton.hasDestructiveAction = true
+
+        let response = alert.runModal()
+        if response == .alertSecondButtonReturn {
+            return .terminateNow
+        }
+        return .terminateCancel
     }
 
     private func scheduleHotKeyRegistration() {
@@ -535,7 +559,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func handleQuit() {
         AnalyticsManager.shared.track("menu_item_clicked", properties: ["type": "quit"])
-        AnalyticsManager.shared.track("app_quit", properties: ["axTrusted": AXIsProcessTrusted() ? 1 : 0])
         NSApp.terminate(nil)
     }
 
@@ -708,6 +731,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func updatePanelMenuItems(state: PanelControllerState) {
         stashAllPanelsMenuItem?.isEnabled = state.visibleCount > 0
         restoreAllPanelsMenuItem?.isEnabled = state.stashedCount > 0
+    }
+
+    private func quitConfirmationText(for state: PanelControllerState) -> String {
+        let panelNoun = state.totalCount == 1 ? "floating panel" : "floating panels"
+        if state.stashedCount > 0 {
+            let stashedNoun = state.stashedCount == 1 ? "panel is" : "panels are"
+            return "You still have \(state.totalCount) \(panelNoun) open. \(state.stashedCount) \(stashedNoun) currently stashed. Quit anyway?"
+        }
+        return "You still have \(state.totalCount) \(panelNoun) open. Quit anyway?"
     }
 
     private func currentMouseScreen() -> NSScreen? {
