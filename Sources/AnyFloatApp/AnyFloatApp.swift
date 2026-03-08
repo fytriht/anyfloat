@@ -399,7 +399,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.updatePanelMenuItems(state: state)
         }
         updatePanelMenuItems(state: panelController.currentState)
+        #if !DEBUG
         applyLaunchAtLoginPreferenceOnLaunch()
+        #endif
         scheduleHotKeyRegistration()
     }
 
