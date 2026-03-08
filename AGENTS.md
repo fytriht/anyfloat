@@ -34,6 +34,7 @@ Before finishing changes, run verification only when relevant:
 
 ## Coding Guidelines
 - Prefer minimal, targeted edits.
+- Clean up unused code promptly when making changes to avoid leaving dead code behind.
 - Keep behavior consistent with existing hotkey / menu bar / AX text extraction flow unless change is requested.
 - Avoid introducing new dependencies unless necessary.
 - Do not add new analytics tracking events unless explicitly requested.
