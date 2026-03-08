@@ -1740,7 +1740,7 @@ private struct WindowDragHandle: NSViewRepresentable {
 
 private struct DrawnCloseButton: View {
     private let size: CGFloat = 14
-    private let iconSize: CGFloat = 5
+    private let iconSize: CGFloat = 8.5
     private let buttonWhite: CGFloat = 0.35
     private let defaultAlpha: CGFloat = 0.58
     private let hoverAlpha: CGFloat = 0.78
@@ -1752,9 +1752,9 @@ private struct DrawnCloseButton: View {
             ZStack {
                 Circle()
                     .fill(buttonColor)
-                DrawnXMark()
-                    .stroke(Color.white.opacity(0.95), style: StrokeStyle(lineWidth: 1, lineCap: .round, lineJoin: .round))
-                    .frame(width: iconSize, height: iconSize)
+                Image(systemName: "xmark")
+                    .font(.system(size: iconSize, weight: .black))
+                    .foregroundStyle(Color.white.opacity(0.95))
                     .opacity(isHovered ? 1 : 0)
             }
             .frame(width: size, height: size)
@@ -1774,7 +1774,7 @@ private struct DrawnCloseButton: View {
 
 private struct DrawnStashAllButton: View {
     private let size: CGFloat = 14
-    private let iconSize: CGFloat = 5
+    private let iconSize: CGFloat = 9
     private let buttonWhite: CGFloat = 0.45
     private let defaultAlpha: CGFloat = 0.58
     private let hoverAlpha: CGFloat = 0.78
@@ -1786,8 +1786,8 @@ private struct DrawnStashAllButton: View {
             ZStack {
                 Circle()
                     .fill(buttonColor)
-                Image(systemName: "rectangle.stack.fill")
-                    .font(.system(size: iconSize + 1, weight: .semibold))
+                Image(systemName: "minus")
+                    .font(.system(size: iconSize, weight: .black))
                     .foregroundStyle(Color.white.opacity(0.95))
                     .opacity(isHovered ? 1 : 0)
             }
