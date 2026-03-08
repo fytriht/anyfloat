@@ -1660,6 +1660,7 @@ private struct FloatingTextView: View {
     let onTextChange: (String) -> Void
     let onClosePanel: () -> Void
     let onStashAllPanels: () -> Void
+    @State private var isTopBarHovering = false
     private let cornerRadius: CGFloat = 16
     private let topBarHeight: CGFloat = 36
     private let edgeDragThickness: CGFloat = 12
@@ -1697,10 +1698,15 @@ private struct FloatingTextView: View {
     private var topBar: some View {
         ZStack(alignment: .leading) {
             WindowDragHandle()
-            HStack(spacing: 6) {
-                DrawnCloseButton(action: onClosePanel)
-                DrawnStashAllButton(action: onStashAllPanels)
-                DrawnPlaceholderButton()
+            HStack {
+                HStack(spacing: 6) {
+                    DrawnCloseButton(showsIcon: isTopBarHovering, action: onClosePanel)
+                    DrawnStashAllButton(showsIcon: isTopBarHovering, action: onStashAllPanels)
+                    DrawnPlaceholderButton()
+                }
+                .onHover { hovering in
+                    isTopBarHovering = hovering
+                }
                 Spacer()
             }
             .padding(.horizontal, 12)
@@ -1745,6 +1751,7 @@ private struct DrawnCloseButton: View {
     private let defaultAlpha: CGFloat = 0.58
     private let hoverAlpha: CGFloat = 0.78
     @State private var isHovered = false
+    let showsIcon: Bool
     let action: () -> Void
 
     var body: some View {
@@ -1755,7 +1762,7 @@ private struct DrawnCloseButton: View {
                 Image(systemName: "xmark")
                     .font(.system(size: iconSize, weight: .black))
                     .foregroundStyle(Color.white.opacity(0.95))
-                    .opacity(isHovered ? 1 : 0)
+                    .opacity(showsIcon ? 1 : 0)
             }
             .frame(width: size, height: size)
         }
@@ -1779,6 +1786,7 @@ private struct DrawnStashAllButton: View {
     private let defaultAlpha: CGFloat = 0.58
     private let hoverAlpha: CGFloat = 0.78
     @State private var isHovered = false
+    let showsIcon: Bool
     let action: () -> Void
 
     var body: some View {
@@ -1789,7 +1797,7 @@ private struct DrawnStashAllButton: View {
                 Image(systemName: "minus")
                     .font(.system(size: iconSize, weight: .black))
                     .foregroundStyle(Color.white.opacity(0.95))
-                    .opacity(isHovered ? 1 : 0)
+                    .opacity(showsIcon ? 1 : 0)
             }
             .frame(width: size, height: size)
         }
