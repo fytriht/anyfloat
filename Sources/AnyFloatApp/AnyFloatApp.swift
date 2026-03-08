@@ -737,10 +737,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func quitConfirmationText(for state: PanelControllerState) -> String {
         let panelNoun = state.totalCount == 1 ? "floating panel" : "floating panels"
-        if state.stashedCount > 0 {
-            let stashedNoun = state.stashedCount == 1 ? "panel is" : "panels are"
-            return "You still have \(state.totalCount) \(panelNoun) open. \(state.stashedCount) \(stashedNoun) currently stashed. Quit anyway?"
-        }
         return "You still have \(state.totalCount) \(panelNoun) open. Quit anyway?"
     }
 
