@@ -1839,19 +1839,6 @@ private struct DrawnPlaceholderButton: View {
     }
 }
 
-private struct DrawnXMark: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let half = min(rect.width, rect.height) * 0.46
-        let center = CGPoint(x: rect.midX, y: rect.midY)
-        path.move(to: CGPoint(x: center.x - half, y: center.y - half))
-        path.addLine(to: CGPoint(x: center.x + half, y: center.y + half))
-        path.move(to: CGPoint(x: center.x + half, y: center.y - half))
-        path.addLine(to: CGPoint(x: center.x - half, y: center.y + half))
-        return path
-    }
-}
-
 enum SelectedTextReader {
     private static let axTimeout: Float = 1.5
     private static let maxRetries = 3
