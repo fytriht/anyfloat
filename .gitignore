@@ -1,5 +1,6 @@
 .build/
 .build-cache/
+.build-clang-cache/
 .tmp/
 dist/
 .DS_Store
