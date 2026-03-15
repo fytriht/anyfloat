@@ -1654,8 +1654,7 @@ private struct StashWidgetView: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(NSColor.windowBackgroundColor).opacity(0.96))
+            WhiteBlurBackground(cornerRadius: 12, whiteOpacity: 0.5, blurOpacity: 0.65)
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(Color(NSColor.separatorColor), lineWidth: 1)
 
@@ -1672,6 +1671,41 @@ private struct StashWidgetView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(width: widgetSize.width, height: widgetSize.height)
+    }
+}
+
+private struct WhiteBlurBackground: View {
+    let cornerRadius: CGFloat
+    let whiteOpacity: CGFloat
+    let blurOpacity: CGFloat
+
+    var body: some View {
+        ZStack {
+            VisualEffectBlur(material: .underWindowBackground, blendingMode: .behindWindow)
+                .opacity(blurOpacity)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(Color.white.opacity(whiteOpacity))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+}
+
+private struct VisualEffectBlur: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+    let blendingMode: NSVisualEffectView.BlendingMode
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.state = .active
+        view.material = material
+        view.blendingMode = blendingMode
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.state = .active
+        nsView.material = material
+        nsView.blendingMode = blendingMode
     }
 }
 
@@ -1812,8 +1846,7 @@ private struct FloatingTextView: View {
                 .frame(height: bottomEdgeDragThickness)
         }
         .background(
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(Color(NSColor.windowBackgroundColor))
+            WhiteBlurBackground(cornerRadius: cornerRadius, whiteOpacity: 0.5, blurOpacity: 0.65)
         )
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
