@@ -867,6 +867,10 @@ private final class FloatingTextContent: ObservableObject {
     }
 }
 
+private final class ModifierKeyState: ObservableObject {
+    @Published var isOptionPressed = false
+}
+
 fileprivate struct PanelControllerState {
     let visibleCount: Int
     let stashedCount: Int
@@ -900,7 +904,9 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     private var closedPanelHistory: [ClosedPanelHistoryEntry] = []
     private var stashWidgetController: StashWidgetController?
     private var keyMonitor: Any?
+    private var flagsMonitor: Any?
     private var preferredFontSize: CGFloat
+    private let modifierKeyState = ModifierKeyState()
 
     private let maxClosedPanelHistoryCount = 20
     private let defaultFontSize: CGFloat = 12
@@ -928,6 +934,9 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     deinit {
         if let keyMonitor {
             NSEvent.removeMonitor(keyMonitor)
+        }
+        if let flagsMonitor {
+            NSEvent.removeMonitor(flagsMonitor)
         }
     }
 
@@ -1051,6 +1060,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         hostingView.translatesAutoresizingMaskIntoConstraints = false
         panel.contentView = hostingView
         installKeyMonitorIfNeeded()
+        installFlagsMonitorIfNeeded()
         return PanelContext(
             panel: panel,
             hostingView: hostingView,
@@ -1160,6 +1170,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     private func makeFloatingTextView(panel: NSPanel, textContent: FloatingTextContent, fontSize: CGFloat) -> FloatingTextView {
         FloatingTextView(
             textContent: textContent,
+            modifierKeyState: modifierKeyState,
             fontSize: fontSize,
             onTextChange: { [weak self, weak panel] updatedText in
                 guard let self, let panel else { return }
@@ -1177,6 +1188,10 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
             },
             onArrangePanels: { [weak self] in
                 self?.arrangeVisibleWindows()
+            },
+            onCopyTextAndClose: { [weak self, weak panel] in
+                guard let self, let panel else { return }
+                self.copyTextAndClose(for: panel)
             }
         )
     }
@@ -1267,6 +1282,28 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
                 return event
             }
         }
+    }
+
+    private func installFlagsMonitorIfNeeded() {
+        guard flagsMonitor == nil else { return }
+
+        modifierKeyState.isOptionPressed = NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.option)
+        flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            self?.modifierKeyState.isOptionPressed = event.modifierFlags
+                .intersection(.deviceIndependentFlagsMask)
+                .contains(.option)
+            return event
+        }
+    }
+
+    private func copyTextAndClose(for panel: NSPanel) {
+        let panelID = ObjectIdentifier(panel)
+        guard let context = panelContexts[panelID] else { return }
+
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(context.textContent.text, forType: .string)
+        requestClose(for: panel)
     }
 
     private func adjustFontSize(by delta: CGFloat, for panel: NSPanel) {
@@ -2032,16 +2069,21 @@ private struct StashWidgetInteractionHandle: NSViewRepresentable {
 
 private struct FloatingTextView: View {
     @ObservedObject var textContent: FloatingTextContent
+    @ObservedObject var modifierKeyState: ModifierKeyState
     let fontSize: CGFloat
     let onTextChange: (String) -> Void
     let onClosePanel: () -> Void
     let onStashAllPanels: () -> Void
     let onArrangePanels: () -> Void
+    let onCopyTextAndClose: () -> Void
     @State private var isTopBarHovering = false
     private let cornerRadius: CGFloat = 16
     private let topBarHeight: CGFloat = 36
     private let edgeDragThickness: CGFloat = 12
     private let bottomEdgeDragThickness: CGFloat = 16
+    private var isAlternateThirdButtonMode: Bool {
+        isTopBarHovering && modifierKeyState.isOptionPressed
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -2078,7 +2120,12 @@ private struct FloatingTextView: View {
                 HStack(spacing: 6) {
                     DrawnCloseButton(showsIcon: isTopBarHovering, action: onClosePanel)
                     DrawnStashAllButton(showsIcon: isTopBarHovering, action: onStashAllPanels)
-                    DrawnArrangeWindowsButton(showsIcon: isTopBarHovering, action: onArrangePanels)
+                    DrawnThirdActionButton(
+                        showsIcon: isTopBarHovering,
+                        isAlternate: isAlternateThirdButtonMode,
+                        defaultAction: onArrangePanels,
+                        alternateAction: onCopyTextAndClose
+                    )
                 }
                 .onHover { hovering in
                     isTopBarHovering = hovering
@@ -2190,34 +2237,37 @@ private struct DrawnStashAllButton: View {
     }
 }
 
-private struct DrawnArrangeWindowsButton: View {
+private struct DrawnThirdActionButton: View {
     private let size: CGFloat = 14
-    private let iconSize: CGFloat = 8.5
+    private let defaultIconSize: CGFloat = 8.5
+    private let alternateIconSize: CGFloat = 7.5
     private let buttonWhite: CGFloat = 0.55
     private let defaultAlpha: CGFloat = 0.58
     private let hoverAlpha: CGFloat = 0.78
     @State private var isHovered = false
     let showsIcon: Bool
-    let action: () -> Void
+    let isAlternate: Bool
+    let defaultAction: () -> Void
+    let alternateAction: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button(action: isAlternate ? alternateAction : defaultAction) {
             ZStack {
                 Circle()
                     .fill(buttonColor)
-                Image(systemName: "arrow.up.right")
-                    .font(.system(size: iconSize, weight: .black))
+                Image(systemName: isAlternate ? "square.on.square" : "arrow.up.right")
+                    .font(.system(size: isAlternate ? alternateIconSize : defaultIconSize, weight: .black))
                     .foregroundStyle(Color.white.opacity(0.95))
                     .opacity(showsIcon ? 1 : 0)
             }
             .frame(width: size, height: size)
         }
         .buttonStyle(.plain)
-        .help("Arrange Windows")
+        .help(isAlternate ? "Copy Text and Close" : "Arrange Windows")
         .onHover { hovering in
             isHovered = hovering
         }
-        .accessibilityLabel("Arrange windows")
+        .accessibilityLabel(isAlternate ? "Copy text and close" : "Arrange windows")
     }
 
     private var buttonColor: Color {
