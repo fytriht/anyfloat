@@ -24,6 +24,12 @@ struct AnyFloatApp: App {
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
+            CommandGroup(after: .newItem) {
+                Button("Reopen Closed Panel") {
+                    appDelegate.reopenClosedPanel()
+                }
+                .keyboardShortcut("t", modifiers: [.command, .shift])
+            }
         }
     }
 }
@@ -380,6 +386,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var hotKeyHandlerRef: EventHandlerRef?
     private let panelController = FloatingPanelController()
     private var statusItem: NSStatusItem?
+    private var reopenClosedPanelMenuItem: NSMenuItem?
     private var stashAllPanelsMenuItem: NSMenuItem?
     private var restoreAllPanelsMenuItem: NSMenuItem?
     private var preferencesWindowController: PreferencesWindowController?
@@ -516,10 +523,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Show Selected Text", action: #selector(handleShowSelectedText), keyEquivalent: ""))
+        let reopenMenuItem = NSMenuItem(title: "Reopen Closed Panel", action: #selector(handleReopenClosedPanel), keyEquivalent: "T")
+        reopenMenuItem.keyEquivalentModifierMask = [.command, .shift]
         let stashMenuItem = NSMenuItem(title: "Stash All Panels", action: #selector(handleStashAllPanels), keyEquivalent: "")
         let restoreMenuItem = NSMenuItem(title: "Restore All Panels", action: #selector(handleRestoreAllPanels), keyEquivalent: "")
+        menu.addItem(reopenMenuItem)
         menu.addItem(stashMenuItem)
         menu.addItem(restoreMenuItem)
+        reopenClosedPanelMenuItem = reopenMenuItem
         stashAllPanelsMenuItem = stashMenuItem
         restoreAllPanelsMenuItem = restoreMenuItem
         menu.addItem(NSMenuItem(title: "Preferences...", action: #selector(handleOpenPreferences), keyEquivalent: ","))
@@ -551,6 +562,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let state = panelController.currentState
         guard state.visibleCount > 0 else { return }
         panelController.stashAllPanels(anchorScreen: currentMouseScreen())
+    }
+
+    @objc private func handleReopenClosedPanel() {
+        reopenClosedPanel()
     }
 
     @objc private func handleRestoreAllPanels() {
@@ -623,6 +638,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func handleOpenAbout() {
         AnalyticsManager.shared.track("menu_item_clicked", properties: ["type": "about"])
         openAboutWindow()
+    }
+
+    func reopenClosedPanel() {
+        guard panelController.currentState.closedHistoryCount > 0 else { return }
+        panelController.restoreLastClosedPanel()
     }
 
     private func applyHotKeyConfiguration(_ configuration: HotKeyConfiguration) {
@@ -731,6 +751,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func updatePanelMenuItems(state: PanelControllerState) {
+        reopenClosedPanelMenuItem?.isEnabled = state.closedHistoryCount > 0
         stashAllPanelsMenuItem?.isEnabled = state.visibleCount > 0
         restoreAllPanelsMenuItem?.isEnabled = state.stashedCount > 0
     }
@@ -811,6 +832,8 @@ private final class AnalyticsManager {
 }
 
 private final class FloatingBorderlessPanel: NSPanel {
+    var onCommandClose: (() -> Void)?
+
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 
@@ -818,7 +841,7 @@ private final class FloatingBorderlessPanel: NSPanel {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if modifiers == .command,
            event.charactersIgnoringModifiers?.lowercased() == "w" {
-            close()
+            onCommandClose?()
             return true
         }
         return super.performKeyEquivalent(with: event)
@@ -836,10 +859,15 @@ private final class FloatingTextContent: ObservableObject {
 fileprivate struct PanelControllerState {
     let visibleCount: Int
     let stashedCount: Int
+    let closedHistoryCount: Int
     let totalCount: Int
 }
 
 final class FloatingPanelController: NSObject, NSWindowDelegate {
+    private struct ClosedPanelHistoryEntry {
+        let text: String
+    }
+
     private struct PanelContext {
         let panel: NSPanel
         let hostingView: NSHostingView<FloatingTextView>
@@ -858,10 +886,12 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     private var stashedPanelIDs: Set<ObjectIdentifier> = []
     private var panelOrder: [ObjectIdentifier] = []
     private var panelDisplayIDs: [ObjectIdentifier: CGDirectDisplayID] = [:]
+    private var closedPanelHistory: [ClosedPanelHistoryEntry] = []
     private var stashWidgetController: StashWidgetController?
     private var keyMonitor: Any?
     private var preferredFontSize: CGFloat
 
+    private let maxClosedPanelHistoryCount = 20
     private let defaultFontSize: CGFloat = 12
     private let minFontSize: CGFloat = 8
     private let maxFontSize: CGFloat = 36
@@ -949,6 +979,11 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         notifyStateChanged()
     }
 
+    func restoreLastClosedPanel() {
+        guard let entry = closedPanelHistory.popLast() else { return }
+        show(text: entry.text, keepUnfocusedOnOpen: false)
+    }
+
     private func createPanelContext(text: String, fontSize: CGFloat) -> PanelContext {
         let textContent = FloatingTextContent(text: text)
 
@@ -972,6 +1007,10 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         panel.contentMinSize = minPanelSize
         panel.contentMaxSize = maxPanelSize
         panel.delegate = self
+        panel.onCommandClose = { [weak self, weak panel] in
+            guard let self, let panel else { return }
+            self.requestClose(for: panel)
+        }
 
         let contentView = makeFloatingTextView(panel: panel, textContent: textContent, fontSize: fontSize)
         let hostingView = NSHostingView(rootView: contentView)
@@ -1094,8 +1133,9 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
                 guard let context = self.panelContexts[panelID], context.isAutoHeightEnabled else { return }
                 self.resizePanelHeightToFitText(panel, text: updatedText, fontSize: context.fontSize)
             },
-            onClosePanel: { [weak panel] in
-                panel?.close()
+            onClosePanel: { [weak self, weak panel] in
+                guard let self, let panel else { return }
+                self.requestClose(for: panel)
             },
             onStashAllPanels: { [weak self, weak panel] in
                 guard let self else { return }
@@ -1172,7 +1212,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
             if modifiers == .command,
                event.charactersIgnoringModifiers?.lowercased() == "w" {
-                panel.close()
+                self.requestClose(for: panel)
                 return nil
             }
 
@@ -1495,8 +1535,23 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         return PanelControllerState(
             visibleCount: visibleCount,
             stashedCount: stashedPanelIDs.count,
+            closedHistoryCount: closedPanelHistory.count,
             totalCount: panelContexts.count
         )
+    }
+
+    private func requestClose(for panel: NSPanel) {
+        let panelID = ObjectIdentifier(panel)
+        guard let context = panelContexts[panelID] else { return }
+        let text = context.textContent.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.isEmpty {
+            closedPanelHistory.append(ClosedPanelHistoryEntry(text: context.textContent.text))
+        }
+        if closedPanelHistory.count > maxClosedPanelHistoryCount {
+            closedPanelHistory.removeFirst(closedPanelHistory.count - maxClosedPanelHistoryCount)
+        }
+        notifyStateChanged()
+        panel.close()
     }
 
     private func pruneDanglingPanelIDs() {
