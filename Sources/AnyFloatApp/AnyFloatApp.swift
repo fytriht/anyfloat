@@ -866,15 +866,15 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     private let minFontSize: CGFloat = 8
     private let maxFontSize: CGFloat = 36
     private let fontSizeDefaultsKey = "floatingPanel.fontSize"
-    private let mouseOffsetX: CGFloat = 16
-    private let mouseOffsetY: CGFloat = 16
     private let minPanelSize = NSSize(width: 300, height: 120)
     private let maxPanelSize = NSSize(width: 600, height: 800)
     private let defaultPanelSize = NSSize(width: 300, height: 400)
     private let textHorizontalPadding: CGFloat = 32
     private let textVerticalPadding: CGFloat = 16
     private let textHeightSafetyInset: CGFloat = 36
+    private let layoutEdgeMargin: CGFloat = 12
     private let arrangeGap: CGFloat = 12
+    private let widgetToPanelGap: CGFloat = 12
 
     override init() {
         preferredFontSize = defaultFontSize
@@ -899,7 +899,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         panelOrder.removeAll { $0 == panelID }
         panelOrder.insert(panelID, at: 0)
         resetPanelSizeToDefault(panel, text: text, fontSize: preferredFontSize)
-        positionPanelNearMouse(panel)
+        positionNewPanel(panel, panelID: panelID)
         rememberPanelDisplayID(for: panel, panelID: panelID)
         _ = NSRunningApplication.current.activate(options: [.activateIgnoringOtherApps])
         NSApp.activate(ignoringOtherApps: true)
@@ -1231,20 +1231,70 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         UserDefaults.standard.set(Double(preferredFontSize), forKey: fontSizeDefaultsKey)
     }
 
-    private func positionPanelNearMouse(_ panel: NSPanel) {
-        let mouseLocation = NSEvent.mouseLocation
-        let panelSize = panel.frame.size
-        let targetScreen = NSScreen.screens.first { $0.frame.contains(mouseLocation) } ?? NSScreen.main
-        let visibleFrame = targetScreen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? NSRect.zero
+    private func positionNewPanel(_ panel: NSPanel, panelID: ObjectIdentifier) {
+        guard let targetScreen = screenForCurrentMouse() ?? NSScreen.main ?? NSScreen.screens.first else { return }
+        let visibleFrame = targetScreen.visibleFrame
         guard !visibleFrame.isEmpty else { return }
+        let targetDisplayID = displayID(for: targetScreen)
 
-        var originX = mouseLocation.x + mouseOffsetX
-        var originY = mouseLocation.y - panelSize.height - mouseOffsetY
+        let visiblePanelIDsOnScreen = panelOrder.filter { existingPanelID in
+            guard
+                existingPanelID != panelID,
+                let context = panelContexts[existingPanelID],
+                !stashedPanelIDs.contains(existingPanelID),
+                context.panel.isVisible
+            else {
+                return false
+            }
 
-        originX = min(max(originX, visibleFrame.minX), visibleFrame.maxX - panelSize.width)
-        originY = min(max(originY, visibleFrame.minY), visibleFrame.maxY - panelSize.height)
+            let panelCenter = NSPoint(x: context.panel.frame.midX, y: context.panel.frame.midY)
+            let existingDisplayID = panelDisplayIDs[existingPanelID]
+                ?? displayID(for: context.panel.screen)
+                ?? displayID(forPoint: panelCenter)
+            return existingDisplayID == targetDisplayID
+        }
 
-        panel.setFrameOrigin(NSPoint(x: originX, y: originY))
+        var existingFrames = visiblePanelIDsOnScreen.compactMap { panelContexts[$0]?.panel.frame }
+        let stashWidgetFrame = stashWidgetController?.visibleFrame(on: targetScreen)
+        if let stashWidgetFrame {
+            existingFrames.append(stashWidgetFrame)
+        }
+        let existingSizes = visiblePanelIDsOnScreen.compactMap { panelContexts[$0]?.panel.frame.size }
+        let panelSize = panel.frame.size
+
+        if let stashWidgetFrame,
+           let anchoredFrame = anchoredFrameInWidgetColumn(
+                stashWidgetFrame: stashWidgetFrame,
+                visiblePanelIDsOnScreen: visiblePanelIDsOnScreen,
+                targetScreen: targetScreen,
+                panelSize: panelSize,
+                in: visibleFrame
+           ),
+           existingFrames.allSatisfy({ !$0.intersects(anchoredFrame) }) {
+            panel.setFrameOrigin(anchoredFrame.origin)
+            return
+        }
+
+        var extraSlotsNeeded = 1
+        var attemptedOriginKeys: Set<String> = []
+        while true {
+            let candidateSizes = existingSizes + Array(repeating: panelSize, count: extraSlotsNeeded)
+            guard let candidateOrigin = panelLayoutOrigins(for: candidateSizes, in: visibleFrame).last else { return }
+            let candidateOriginKey = originKey(for: candidateOrigin)
+            guard attemptedOriginKeys.insert(candidateOriginKey).inserted else {
+                // Once layout generation starts repeating origins, no additional slot can be found.
+                panel.setFrameOrigin(candidateOrigin)
+                return
+            }
+
+            let candidateFrame = NSRect(origin: candidateOrigin, size: panelSize)
+            if existingFrames.allSatisfy({ !$0.intersects(candidateFrame) }) {
+                panel.setFrameOrigin(candidateOrigin)
+                return
+            }
+
+            extraSlotsNeeded += 1
+        }
     }
 
     private func arrangePanelsAcrossScreens(panelIDs: [ObjectIdentifier]) {
@@ -1296,41 +1346,117 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         let layoutFrame = screen.visibleFrame
         guard layoutFrame.width > 0, layoutFrame.height > 0 else { return }
 
-        // Right-anchored column layout: top -> bottom, preserving each panel's original size.
-        var currentRightEdgeX = layoutFrame.maxX
-        var currentTopY = layoutFrame.maxY
+        let panelSizes = panelIDs.compactMap { panelContexts[$0]?.panel.frame.size }
+        let origins = panelLayoutOrigins(for: panelSizes, in: layoutFrame)
+
+        for (panelID, origin) in zip(panelIDs, origins) {
+            guard let panel = panelContexts[panelID]?.panel else { continue }
+            panel.setFrameOrigin(origin)
+            rememberPanelDisplayID(for: panel, panelID: panelID)
+        }
+    }
+
+    private func panelLayoutOrigins(for panelSizes: [NSSize], in layoutFrame: NSRect) -> [NSPoint] {
+        guard !panelSizes.isEmpty else { return [] }
+        let insetLayoutFrame = layoutFrame.insetBy(dx: layoutEdgeMargin, dy: layoutEdgeMargin)
+        guard insetLayoutFrame.width > 0, insetLayoutFrame.height > 0 else { return [] }
+
+        var origins: [NSPoint] = []
+        var currentRightEdgeX = insetLayoutFrame.maxX
+        var currentTopY = insetLayoutFrame.maxY
         var currentColumnMaxWidth: CGFloat = 0
 
-        for panelID in panelIDs {
-            guard let context = panelContexts[panelID] else { continue }
-            let panel = context.panel
-            let panelSize = panel.frame.size
-
+        for panelSize in panelSizes {
             var candidateY = currentTopY - panelSize.height
-            if candidateY < layoutFrame.minY {
-                // Start a new column on the left when current column runs out of vertical space.
+            if candidateY < insetLayoutFrame.minY {
                 currentRightEdgeX -= (currentColumnMaxWidth + arrangeGap)
-                currentTopY = layoutFrame.maxY
+                currentTopY = insetLayoutFrame.maxY
                 currentColumnMaxWidth = 0
                 candidateY = currentTopY - panelSize.height
             }
 
-            // Keep the right edge attached to the screen edge for the rightmost column.
-            var candidateX = currentRightEdgeX - panelSize.width
-            let minAllowedX = layoutFrame.minX
-            if candidateX < minAllowedX {
-                candidateX = minAllowedX
-            }
-            if candidateY < layoutFrame.minY {
-                candidateY = layoutFrame.minY
-            }
-
-            panel.setFrameOrigin(NSPoint(x: candidateX, y: candidateY))
-            rememberPanelDisplayID(for: panel, panelID: panelID)
+            let candidateX = max(insetLayoutFrame.minX, currentRightEdgeX - panelSize.width)
+            origins.append(NSPoint(x: candidateX, y: max(insetLayoutFrame.minY, candidateY)))
 
             currentTopY = candidateY - arrangeGap
             currentColumnMaxWidth = max(currentColumnMaxWidth, panelSize.width)
         }
+
+        return origins
+    }
+
+    private func anchoredPanelFrame(below anchorFrame: NSRect, panelSize: NSSize, in visibleFrame: NSRect) -> NSRect? {
+        var candidateOrigin = NSPoint(
+            x: anchorFrame.maxX - panelSize.width,
+            y: anchorFrame.minY - widgetToPanelGap - panelSize.height
+        )
+        let minX = visibleFrame.minX + layoutEdgeMargin
+        let maxX = visibleFrame.maxX - layoutEdgeMargin - panelSize.width
+        let minY = visibleFrame.minY + layoutEdgeMargin
+        let maxY = visibleFrame.maxY - layoutEdgeMargin - panelSize.height
+
+        guard maxX >= minX, maxY >= minY else { return nil }
+
+        candidateOrigin.x = min(max(candidateOrigin.x, minX), maxX)
+        candidateOrigin.y = min(max(candidateOrigin.y, minY), maxY)
+
+        let candidateFrame = NSRect(origin: candidateOrigin, size: panelSize)
+        guard candidateFrame.maxY <= anchorFrame.minY - widgetToPanelGap + 0.5 else { return nil }
+        return candidateFrame
+    }
+
+    private func anchoredFrameInWidgetColumn(
+        stashWidgetFrame: NSRect,
+        visiblePanelIDsOnScreen: [ObjectIdentifier],
+        targetScreen: NSScreen,
+        panelSize: NSSize,
+        in visibleFrame: NSRect
+    ) -> NSRect? {
+        let panelFrames = visiblePanelIDsOnScreen.compactMap { panelContexts[$0]?.panel.frame }
+        let anchorFrame = widgetColumnAnchorFrame(
+            stashWidgetFrame: stashWidgetFrame,
+            panelFrames: panelFrames,
+            targetScreen: targetScreen
+        )
+        return anchoredPanelFrame(below: anchorFrame, panelSize: panelSize, in: visibleFrame)
+    }
+
+    private func widgetColumnAnchorFrame(
+        stashWidgetFrame: NSRect,
+        panelFrames: [NSRect],
+        targetScreen: NSScreen
+    ) -> NSRect {
+        let alignmentTolerance: CGFloat = 1
+        let gapTolerance: CGFloat = 1
+        let targetRightEdge = stashWidgetFrame.maxX
+        var anchorFrame = stashWidgetFrame
+
+        while true {
+            guard let nextFrame = panelFrames
+                .filter({
+                    abs($0.maxX - targetRightEdge) <= alignmentTolerance &&
+                    abs($0.maxY - (anchorFrame.minY - widgetToPanelGap)) <= gapTolerance &&
+                    visibleFrameContainsFrame($0, on: targetScreen)
+                })
+                .min(by: { $0.minY > $1.minY }) else {
+                return anchorFrame
+            }
+
+            anchorFrame = nextFrame
+        }
+    }
+
+    private func visibleFrameContainsFrame(_ frame: NSRect, on screen: NSScreen) -> Bool {
+        screen.visibleFrame.contains(frame)
+    }
+
+    private func originKey(for point: NSPoint) -> String {
+        "\(point.x.rounded())_\(point.y.rounded())"
+    }
+
+    private func screenForCurrentMouse() -> NSScreen? {
+        let mouseLocation = NSEvent.mouseLocation
+        return NSScreen.screens.first { $0.frame.contains(mouseLocation) }
     }
 
     private func ensureStashWidgetController() -> StashWidgetController {
@@ -1411,12 +1537,11 @@ private final class StashWidgetPanel: NSPanel {
 private final class StashWidgetController {
     private static let defaultWidgetSize = NSSize(width: 100, height: 44)
     private let widgetSize = StashWidgetController.defaultWidgetSize
-    private let edgeMargin: CGFloat = 16
+    private let edgeMargin: CGFloat = 12
     private let onActivate: () -> Void
 
     private var panel: StashWidgetPanel?
     private var hostingView: NSHostingView<StashWidgetView>?
-    private var hasPositionedPanel = false
 
     init(onActivate: @escaping () -> Void) {
         self.onActivate = onActivate
@@ -1440,6 +1565,16 @@ private final class StashWidgetController {
 
     func hide() {
         panel?.orderOut(nil)
+    }
+
+    func visibleFrame(on screen: NSScreen) -> NSRect? {
+        guard let panel, panel.isVisible else { return nil }
+
+        let targetVisibleFrame = screen.visibleFrame
+        let panelCenter = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
+        guard targetVisibleFrame.contains(panelCenter) else { return nil }
+
+        return panel.frame
     }
 
     private func ensurePanel(hiddenCount: Int) -> StashWidgetPanel {
@@ -1484,12 +1619,8 @@ private final class StashWidgetController {
 
         var frame = panel.frame
         frame.size = widgetSize
-
-        if !hasPositionedPanel {
-            frame.origin.x = visibleFrame.maxX - widgetSize.width - edgeMargin
-            frame.origin.y = visibleFrame.maxY - widgetSize.height - edgeMargin
-            hasPositionedPanel = true
-        }
+        frame.origin.x = visibleFrame.maxX - widgetSize.width - edgeMargin
+        frame.origin.y = visibleFrame.maxY - widgetSize.height - edgeMargin
 
         let minX = visibleFrame.minX
         let maxX = visibleFrame.maxX - frame.width
@@ -1503,6 +1634,10 @@ private final class StashWidgetController {
     private func targetVisibleFrame(for panel: NSPanel, anchorScreen: NSScreen?) -> NSRect {
         if let anchorScreen {
             return anchorScreen.visibleFrame
+        }
+        let mouseLocation = NSEvent.mouseLocation
+        if let screen = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) }) {
+            return screen.visibleFrame
         }
         let center = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
         if let screen = NSScreen.screens.first(where: { $0.frame.contains(center) }) {
