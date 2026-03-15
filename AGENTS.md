@@ -14,6 +14,10 @@ This file defines repository-specific instructions for coding agents working in 
 - Xcode project: `AnyFloat.xcodeproj`.
 - Packaging script: `scripts/package_app.sh`.
 
+## Docs Navigation
+- When needed, review documentation under `docs/` for project terminology or behavior context.
+- `docs/glossary.md`: concise project terminology reference.
+
 ## Environment
 - Required: macOS 13+.
 - Required for build and packaging: full Xcode app selected for `xcodebuild`.
@@ -44,8 +48,10 @@ Before finishing changes, run verification only when relevant:
 - Do not revert unrelated local changes.
 
 ## Documentation Sync
+- When needed, consult docs in `docs/` before making assumptions about project terms or documented behavior.
 - Update `AGENTS.md` whenever repository workflow or agent collaboration rules change.
-- Before finishing a task, verify docs are in sync; if documentation-impacting behavior changed, doc updates are required.
+- Before finishing a task, verify docs are in sync; if terminology, behavior, usage, or workflow changed, update the relevant docs.
+- When editing code or behavior that is already documented, keep the corresponding docs updated in the same change when applicable.
 
 ## Test Case Reference
 - When needed, agents may reference `.note/test-cases.md` for test case details.
