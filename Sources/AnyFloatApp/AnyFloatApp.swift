@@ -25,7 +25,7 @@ struct AnyFloatApp: App {
                 .keyboardShortcut(",", modifiers: .command)
             }
             CommandGroup(after: .newItem) {
-                Button("Reopen Closed Panel") {
+                Button("Reopen Last Closed Window") {
                     appDelegate.reopenClosedPanel()
                 }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
@@ -365,6 +365,50 @@ private struct HotKeyConfiguration: Codable {
         return parts.joined(separator: " + ")
     }
 
+    var menuKeyEquivalent: String {
+        switch keyCode {
+        case UInt32(kVK_ANSI_A)...UInt32(kVK_ANSI_Z):
+            return keyLabel.lowercased()
+        case UInt32(kVK_ANSI_0)...UInt32(kVK_ANSI_9):
+            return keyLabel
+        case UInt32(kVK_F1):
+            return String(UnicodeScalar(NSF1FunctionKey)!)
+        case UInt32(kVK_F2):
+            return String(UnicodeScalar(NSF2FunctionKey)!)
+        case UInt32(kVK_F3):
+            return String(UnicodeScalar(NSF3FunctionKey)!)
+        case UInt32(kVK_F4):
+            return String(UnicodeScalar(NSF4FunctionKey)!)
+        case UInt32(kVK_F5):
+            return String(UnicodeScalar(NSF5FunctionKey)!)
+        case UInt32(kVK_F6):
+            return String(UnicodeScalar(NSF6FunctionKey)!)
+        case UInt32(kVK_F7):
+            return String(UnicodeScalar(NSF7FunctionKey)!)
+        case UInt32(kVK_F8):
+            return String(UnicodeScalar(NSF8FunctionKey)!)
+        case UInt32(kVK_F9):
+            return String(UnicodeScalar(NSF9FunctionKey)!)
+        case UInt32(kVK_F10):
+            return String(UnicodeScalar(NSF10FunctionKey)!)
+        case UInt32(kVK_F11):
+            return String(UnicodeScalar(NSF11FunctionKey)!)
+        case UInt32(kVK_F12):
+            return String(UnicodeScalar(NSF12FunctionKey)!)
+        default:
+            return ""
+        }
+    }
+
+    var menuModifierFlags: NSEvent.ModifierFlags {
+        var flags: NSEvent.ModifierFlags = []
+        if modifiers & UInt32(cmdKey) != 0 { flags.insert(.command) }
+        if modifiers & UInt32(shiftKey) != 0 { flags.insert(.shift) }
+        if modifiers & UInt32(optionKey) != 0 { flags.insert(.option) }
+        if modifiers & UInt32(controlKey) != 0 { flags.insert(.control) }
+        return flags
+    }
+
     var isValid: Bool {
         guard HotKeyConfiguration.supportedKeys.contains(where: { $0.keyCode == keyCode }) else { return false }
         let sanitized = modifiers & HotKeyConfiguration.allowedModifiers
@@ -386,6 +430,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var hotKeyHandlerRef: EventHandlerRef?
     private let panelController = FloatingPanelController()
     private var statusItem: NSStatusItem?
+    private var newWindowMenuItem: NSMenuItem?
     private var reopenClosedPanelMenuItem: NSMenuItem?
     private var stashAllPanelsMenuItem: NSMenuItem?
     private var restoreAllPanelsMenuItem: NSMenuItem?
@@ -523,22 +568,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Show Selected Text", action: #selector(handleShowSelectedText), keyEquivalent: ""))
-        let reopenMenuItem = NSMenuItem(title: "Reopen Closed Panel", action: #selector(handleReopenClosedPanel), keyEquivalent: "T")
+        let newWindowMenuItem = NSMenuItem(title: "New Window", action: #selector(handleShowSelectedText), keyEquivalent: hotKeyConfiguration.menuKeyEquivalent)
+        newWindowMenuItem.keyEquivalentModifierMask = hotKeyConfiguration.menuModifierFlags
+        menu.addItem(newWindowMenuItem)
+        menu.addItem(NSMenuItem.separator())
+        let reopenMenuItem = NSMenuItem(title: "Reopen Last Closed Window", action: #selector(handleReopenClosedPanel), keyEquivalent: "T")
         reopenMenuItem.keyEquivalentModifierMask = [.command, .shift]
-        let stashMenuItem = NSMenuItem(title: "Stash All Panels", action: #selector(handleStashAllPanels), keyEquivalent: "")
-        let restoreMenuItem = NSMenuItem(title: "Restore All Panels", action: #selector(handleRestoreAllPanels), keyEquivalent: "")
+        let stashMenuItem = NSMenuItem(title: "Stash All Windows", action: #selector(handleStashAllPanels), keyEquivalent: "")
+        let restoreMenuItem = NSMenuItem(title: "Restore Stashed Windows", action: #selector(handleRestoreAllPanels), keyEquivalent: "")
         let arrangeMenuItem = NSMenuItem(title: "Arrange Windows", action: #selector(handleArrangeWindows), keyEquivalent: "")
         menu.addItem(reopenMenuItem)
         menu.addItem(stashMenuItem)
         menu.addItem(restoreMenuItem)
         menu.addItem(arrangeMenuItem)
+        menu.addItem(NSMenuItem.separator())
+        self.newWindowMenuItem = newWindowMenuItem
         reopenClosedPanelMenuItem = reopenMenuItem
         stashAllPanelsMenuItem = stashMenuItem
         restoreAllPanelsMenuItem = restoreMenuItem
         arrangeWindowsMenuItem = arrangeMenuItem
         menu.addItem(NSMenuItem(title: "Preferences...", action: #selector(handleOpenPreferences), keyEquivalent: ","))
-        menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "About AnyFloat", action: #selector(handleOpenAbout), keyEquivalent: ""))
         #if DEBUG
         let quitTitle = "Quit AnyFloat Debug"
@@ -658,6 +707,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func applyHotKeyConfiguration(_ configuration: HotKeyConfiguration) {
         hotKeyConfiguration = configuration
         hotKeyConfiguration.persistToDefaults()
+        newWindowMenuItem?.keyEquivalent = configuration.menuKeyEquivalent
+        newWindowMenuItem?.keyEquivalentModifierMask = configuration.menuModifierFlags
         AnalyticsManager.shared.track(
             "preferences_updated",
             properties: [
