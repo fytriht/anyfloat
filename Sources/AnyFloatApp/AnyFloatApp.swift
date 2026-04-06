@@ -1282,9 +1282,12 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
                 guard let self, let panel else { return }
                 self.requestClose(for: panel)
             },
-            onStashPanel: { [weak self, weak panel] in
+            onMinimizePanel: { [weak self, weak panel] in
                 guard let self, let panel else { return }
                 self.stashPanel(panel)
+            },
+            onHideAllPanels: { [weak self] in
+                self?.hideAllPanels()
             },
             onArrangePanels: { [weak self] in
                 self?.arrangeVisibleWindows()
@@ -1774,7 +1777,8 @@ private struct FloatingTextView: View {
     let fontSize: CGFloat
     let onTextChange: (String) -> Void
     let onClosePanel: () -> Void
-    let onStashPanel: () -> Void
+    let onMinimizePanel: () -> Void
+    let onHideAllPanels: () -> Void
     let onArrangePanels: () -> Void
     let onCopyTextAndClose: () -> Void
     @State private var isTopBarHovering = false
@@ -1782,6 +1786,9 @@ private struct FloatingTextView: View {
     private let topBarHeight: CGFloat = 36
     private let edgeDragThickness: CGFloat = 12
     private let bottomEdgeDragThickness: CGFloat = 16
+    private var isAlternateSecondButtonMode: Bool {
+        isTopBarHovering && modifierKeyState.isOptionPressed
+    }
     private var isAlternateThirdButtonMode: Bool {
         isTopBarHovering && modifierKeyState.isOptionPressed
     }
@@ -1820,7 +1827,12 @@ private struct FloatingTextView: View {
             HStack {
                 HStack(spacing: 6) {
                     DrawnCloseButton(showsIcon: isTopBarHovering, action: onClosePanel)
-                    DrawnStashAllButton(showsIcon: isTopBarHovering, action: onStashPanel)
+                    DrawnStashAllButton(
+                        showsIcon: isTopBarHovering,
+                        isAlternate: isAlternateSecondButtonMode,
+                        defaultAction: onMinimizePanel,
+                        alternateAction: onHideAllPanels
+                    )
                     DrawnThirdActionButton(
                         showsIcon: isTopBarHovering,
                         isAlternate: isAlternateThirdButtonMode,
@@ -1905,36 +1917,39 @@ private struct DrawnCloseButton: View {
 
 private struct DrawnStashAllButton: View {
     private let size: CGFloat = 14
-    private let iconSize: CGFloat = 9
+    private let defaultIconSize: CGFloat = 9
+    private let alternateIconSize: CGFloat = 7.2
     private let buttonWhite: CGFloat = 0.45
     private let defaultAlpha: CGFloat = 0.58
     private let hoverAlpha: CGFloat = 0.78
     @State private var isHovered = false
     let showsIcon: Bool
-    let action: () -> Void
+    let isAlternate: Bool
+    let defaultAction: () -> Void
+    let alternateAction: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button(action: isAlternate ? alternateAction : defaultAction) {
             ZStack {
                 Circle()
                     .fill(buttonColor)
-                Image(systemName: "minus")
-                    .font(.system(size: iconSize, weight: .black))
+                Image(systemName: isAlternate ? "eye.slash.fill" : "minus")
+                    .font(.system(size: isAlternate ? alternateIconSize : defaultIconSize, weight: .black))
                     .foregroundStyle(Color.white.opacity(0.95))
                     .opacity(showsIcon ? 1 : 0)
             }
             .frame(width: size, height: size)
         }
         .buttonStyle(.plain)
-        .help("Minimize Window")
+        .help(isAlternate ? "Hide All Windows" : "Minimize Window")
         .onHover { hovering in
             isHovered = hovering
         }
-        .accessibilityLabel("Minimize window")
+        .accessibilityLabel(isAlternate ? "Hide all windows" : "Minimize window")
     }
 
     private var buttonColor: Color {
-        Color(NSColor(calibratedWhite: buttonWhite, alpha: isHovered ? hoverAlpha : defaultAlpha))
+        return Color(NSColor(calibratedWhite: buttonWhite, alpha: isHovered ? hoverAlpha : defaultAlpha))
     }
 }
 
