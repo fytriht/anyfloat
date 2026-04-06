@@ -489,7 +489,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        guard panelController.currentState.stashedCount > 0 else { return false }
+        let state = panelController.currentState
+        guard state.hiddenCount > 0 || state.stashedCount > 0 else { return false }
         panelController.restoreAllPanels()
         return true
     }
@@ -581,8 +582,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(NSMenuItem.separator())
         let reopenMenuItem = NSMenuItem(title: "Reopen Last Closed Window", action: #selector(handleReopenClosedPanel), keyEquivalent: "T")
         reopenMenuItem.keyEquivalentModifierMask = [.command, .shift]
-        let stashMenuItem = NSMenuItem(title: "Minimize All Windows", action: #selector(handleStashAllPanels), keyEquivalent: "")
-        let restoreMenuItem = NSMenuItem(title: "Restore Minimized Windows", action: #selector(handleRestoreAllPanels), keyEquivalent: "")
+        let stashMenuItem = NSMenuItem(title: "Hide All Windows", action: #selector(handleStashAllPanels), keyEquivalent: "")
+        let restoreMenuItem = NSMenuItem(title: "Show All Windows", action: #selector(handleRestoreAllPanels), keyEquivalent: "")
         let arrangeMenuItem = NSMenuItem(title: "Arrange Windows", action: #selector(handleArrangeWindows), keyEquivalent: "")
         menu.addItem(reopenMenuItem)
         menu.addItem(stashMenuItem)
@@ -621,7 +622,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func handleStashAllPanels() {
         let state = panelController.currentState
         guard state.visibleCount > 0 else { return }
-        panelController.stashAllPanels(anchorScreen: currentMouseScreen())
+        panelController.hideAllPanels()
     }
 
     @objc private func handleReopenClosedPanel() {
@@ -630,7 +631,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func handleRestoreAllPanels() {
         let state = panelController.currentState
-        guard state.stashedCount > 0 else { return }
+        guard state.hiddenCount > 0 || state.stashedCount > 0 else { return }
         panelController.restoreAllPanels()
     }
 
@@ -821,7 +822,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func updatePanelMenuItems(state: PanelControllerState) {
         reopenClosedPanelMenuItem?.isEnabled = state.closedHistoryCount > 0
         stashAllPanelsMenuItem?.isEnabled = state.visibleCount > 0
-        restoreAllPanelsMenuItem?.isEnabled = state.stashedCount > 0
+        restoreAllPanelsMenuItem?.isEnabled = state.hiddenCount > 0 || state.stashedCount > 0
         arrangeWindowsMenuItem?.isEnabled = state.visibleCount > 0 || state.stashedCount > 0
     }
 
@@ -831,13 +832,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func syncDockPresentation(with state: PanelControllerState) {
-        let shouldShowDockIcon = state.stashedCount > 0
+        let dockPanelCount = state.hiddenCount + state.stashedCount
+        let shouldShowDockIcon = dockPanelCount > 0
         if shouldShowDockIcon != isDockIconVisible {
             NSApp.setActivationPolicy(shouldShowDockIcon ? .regular : .accessory)
             isDockIconVisible = shouldShowDockIcon
         }
 
-        NSApp.dockTile.badgeLabel = shouldShowDockIcon ? String(state.stashedCount) : nil
+        NSApp.dockTile.badgeLabel = shouldShowDockIcon ? String(dockPanelCount) : nil
         NSApp.dockTile.display()
     }
 
@@ -918,6 +920,7 @@ private final class AnalyticsManager {
 
 private final class FloatingBorderlessPanel: NSPanel {
     var onCommandClose: (() -> Void)?
+    var onCommandHide: (() -> Void)?
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
@@ -927,6 +930,11 @@ private final class FloatingBorderlessPanel: NSPanel {
         if modifiers == .command,
            event.charactersIgnoringModifiers?.lowercased() == "w" {
             onCommandClose?()
+            return true
+        }
+        if modifiers == .command,
+           event.charactersIgnoringModifiers?.lowercased() == "h" {
+            onCommandHide?()
             return true
         }
         return super.performKeyEquivalent(with: event)
@@ -947,6 +955,7 @@ private final class ModifierKeyState: ObservableObject {
 
 fileprivate struct PanelControllerState {
     let visibleCount: Int
+    let hiddenCount: Int
     let stashedCount: Int
     let closedHistoryCount: Int
     let totalCount: Int
@@ -972,6 +981,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     fileprivate var currentState: PanelControllerState { makePanelState() }
 
     private var panelContexts: [ObjectIdentifier: PanelContext] = [:]
+    private var hiddenPanelIDs: Set<ObjectIdentifier> = []
     private var panelOrder: [ObjectIdentifier] = []
     private var panelDisplayIDs: [ObjectIdentifier: CGDirectDisplayID] = [:]
     private var closedPanelHistory: [ClosedPanelHistoryEntry] = []
@@ -1033,19 +1043,20 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    func stashAllPanels(anchorScreen _: NSScreen?) {
+    func hideAllPanels() {
         pruneDanglingPanelIDs()
         let visiblePanelIDs = panelOrder.filter { panelID in
             guard let panel = panelContexts[panelID]?.panel else { return false }
-            return panel.isVisible && !panel.isMiniaturized
+            return panel.isVisible && !panel.isMiniaturized && !hiddenPanelIDs.contains(panelID)
         }
         guard !visiblePanelIDs.isEmpty else { return }
 
         for panelID in visiblePanelIDs {
             guard let context = panelContexts[panelID] else { continue }
             rememberPanelDisplayID(for: context.panel, panelID: panelID)
-            prepareDockForMiniaturization()
-            context.panel.miniaturize(nil)
+            prepareDockForHiddenPanels()
+            context.panel.orderOut(nil)
+            hiddenPanelIDs.insert(panelID)
         }
 
         notifyStateChanged()
@@ -1053,13 +1064,22 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
     func restoreAllPanels() {
         pruneDanglingPanelIDs()
+        let hiddenOrderedPanelIDs = openingOrderPanelIDs(from: panelOrder.filter { panelID in
+            panelContexts[panelID] != nil && hiddenPanelIDs.contains(panelID)
+        })
         let stashedOrderedPanelIDs = openingOrderPanelIDs(from: panelOrder.filter { panelID in
             panelContexts[panelID]?.panel.isMiniaturized == true
         })
-        guard !stashedOrderedPanelIDs.isEmpty else { return }
+
+        guard !hiddenOrderedPanelIDs.isEmpty || !stashedOrderedPanelIDs.isEmpty else { return }
+
+        for panelID in hiddenOrderedPanelIDs {
+            panelContexts[panelID]?.panel.orderFrontRegardless()
+        }
         for panelID in stashedOrderedPanelIDs {
             panelContexts[panelID]?.panel.deminiaturize(nil)
         }
+        hiddenPanelIDs.subtract(hiddenOrderedPanelIDs)
 
         let allPanelIDs = openingOrderPanelIDs(from: panelOrder.filter { panelContexts[$0] != nil })
         arrangePanelsAcrossScreens(panelIDs: allPanelIDs)
@@ -1069,9 +1089,20 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     func stashPanel(_ panel: NSPanel) {
         let panelID = ObjectIdentifier(panel)
         guard let context = panelContexts[panelID], context.panel.isVisible, !context.panel.isMiniaturized else { return }
+        hiddenPanelIDs.remove(panelID)
         rememberPanelDisplayID(for: context.panel, panelID: panelID)
         prepareDockForMiniaturization()
         context.panel.miniaturize(nil)
+        notifyStateChanged()
+    }
+
+    func hidePanel(_ panel: NSPanel) {
+        let panelID = ObjectIdentifier(panel)
+        guard let context = panelContexts[panelID], context.panel.isVisible, !context.panel.isMiniaturized else { return }
+        rememberPanelDisplayID(for: context.panel, panelID: panelID)
+        prepareDockForHiddenPanels()
+        context.panel.orderOut(nil)
+        hiddenPanelIDs.insert(panelID)
         notifyStateChanged()
     }
 
@@ -1080,7 +1111,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
         let visiblePanelIDs = openingOrderPanelIDs(from: panelOrder.filter { panelID in
             guard let context = panelContexts[panelID] else { return false }
-            return context.panel.isVisible && !context.panel.isMiniaturized
+            return context.panel.isVisible && !context.panel.isMiniaturized && !hiddenPanelIDs.contains(panelID)
         })
         guard !visiblePanelIDs.isEmpty else { return }
         arrangeVisiblePanelsAcrossScreens(panelIDs: visiblePanelIDs)
@@ -1119,6 +1150,9 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         panel.onCommandClose = { [weak self, weak panel] in
             guard let self, let panel else { return }
             self.requestClose(for: panel)
+        }
+        panel.onCommandHide = { [weak self, weak panel] in
+            self?.hideAllPanels()
         }
 
         let contentView = makeFloatingTextView(panel: panel, textContent: textContent, fontSize: fontSize)
@@ -1305,12 +1339,16 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         guard let panel = notification.object as? NSPanel else { return }
         let panelID = ObjectIdentifier(panel)
         panelContexts.removeValue(forKey: panelID)
+        hiddenPanelIDs.remove(panelID)
         panelOrder.removeAll { $0 == panelID }
         panelDisplayIDs.removeValue(forKey: panelID)
         notifyStateChanged()
     }
 
     func windowDidMiniaturize(_ notification: Notification) {
+        if let panel = notification.object as? NSPanel {
+            hiddenPanelIDs.remove(ObjectIdentifier(panel))
+        }
         notifyStateChanged()
     }
 
@@ -1337,6 +1375,11 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
             if modifiers == .command,
                event.charactersIgnoringModifiers?.lowercased() == "w" {
                 self.requestClose(for: panel)
+                return nil
+            }
+            if modifiers == .command,
+               event.charactersIgnoringModifiers?.lowercased() == "h" {
+                self.hideAllPanels()
                 return nil
             }
 
@@ -1428,7 +1471,8 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
                 existingPanelID != panelID,
                 let context = panelContexts[existingPanelID],
                 context.panel.isVisible,
-                !context.panel.isMiniaturized
+                !context.panel.isMiniaturized,
+                !hiddenPanelIDs.contains(existingPanelID)
             else {
                 return false
             }
@@ -1620,17 +1664,23 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     }
 
     private func prepareDockForMiniaturization() {
+        prepareDockForHiddenPanels()
+    }
+
+    private func prepareDockForHiddenPanels() {
         NSApp.setActivationPolicy(.regular)
     }
 
     private func makePanelState() -> PanelControllerState {
         pruneDanglingPanelIDs()
+        let hiddenCount = hiddenPanelIDs.count
         let visibleCount = panelOrder.filter { panelID in
             guard let context = panelContexts[panelID] else { return false }
-            return context.panel.isVisible && !context.panel.isMiniaturized
+            return context.panel.isVisible && !context.panel.isMiniaturized && !hiddenPanelIDs.contains(panelID)
         }.count
         return PanelControllerState(
             visibleCount: visibleCount,
+            hiddenCount: hiddenCount,
             stashedCount: panelOrder.filter { panelID in
                 panelContexts[panelID]?.panel.isMiniaturized == true
             }.count,
@@ -1655,6 +1705,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
     private func pruneDanglingPanelIDs() {
         let existingIDs = Set(panelContexts.keys)
+        hiddenPanelIDs.formIntersection(existingIDs)
         panelOrder = panelOrder.filter { existingIDs.contains($0) }
         panelDisplayIDs = panelDisplayIDs.filter { existingIDs.contains($0.key) }
     }
