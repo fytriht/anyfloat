@@ -5,32 +5,13 @@ import ServiceManagement
 import Mixpanel
 
 @main
-struct AnyFloatApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-
-    var body: some Scene {
-        Settings {
-            EmptyView()
-        }
-        .commands {
-            CommandGroup(replacing: .appInfo) {
-                Button("About AnyFloat") {
-                    appDelegate.openAboutWindow()
-                }
-            }
-            CommandGroup(replacing: .appSettings) {
-                Button("Preferences...") {
-                    appDelegate.openPreferencesWindow()
-                }
-                .keyboardShortcut(",", modifiers: .command)
-            }
-            CommandGroup(after: .newItem) {
-                Button("Reopen Last Closed Window") {
-                    appDelegate.reopenClosedPanel()
-                }
-                .keyboardShortcut("t", modifiers: [.command, .shift])
-            }
-        }
+enum AnyFloatApp {
+    static func main() {
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        app.run()
+        _ = delegate
     }
 }
 
@@ -431,6 +412,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let panelController = FloatingPanelController()
     private var statusItem: NSStatusItem?
     private var newWindowMenuItem: NSMenuItem?
+    private var mainNewWindowMenuItem: NSMenuItem?
     private var reopenClosedPanelMenuItem: NSMenuItem?
     private var stashAllPanelsMenuItem: NSMenuItem?
     private var restoreAllPanelsMenuItem: NSMenuItem?
@@ -444,6 +426,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AnalyticsManager.shared.configure()
+        setupMainMenu()
         NSApp.setActivationPolicy(.accessory)
         requestAccessibilityIfNeeded()
         seedLastExternalAppPID()
@@ -610,6 +593,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.statusItem = item
     }
 
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
+
+        let appMenuItem = NSMenuItem()
+        mainMenu.addItem(appMenuItem)
+
+        let appMenu = NSMenu()
+        appMenuItem.submenu = appMenu
+        appMenu.addItem(NSMenuItem(title: "About AnyFloat", action: #selector(handleOpenAbout), keyEquivalent: ""))
+        appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(NSMenuItem(title: "Preferences...", action: #selector(handleOpenPreferences), keyEquivalent: ","))
+        appMenu.addItem(NSMenuItem.separator())
+
+        #if DEBUG
+        let quitTitle = "Quit AnyFloat Debug"
+        #else
+        let quitTitle = "Quit AnyFloat"
+        #endif
+        appMenu.addItem(NSMenuItem(title: quitTitle, action: #selector(handleQuit), keyEquivalent: "q"))
+
+        let fileMenuItem = NSMenuItem()
+        mainMenu.addItem(fileMenuItem)
+
+        let fileMenu = NSMenu(title: "File")
+        fileMenuItem.submenu = fileMenu
+        let newWindowItem = NSMenuItem(title: "New Window", action: #selector(handleShowSelectedText), keyEquivalent: hotKeyConfiguration.menuKeyEquivalent)
+        newWindowItem.keyEquivalentModifierMask = hotKeyConfiguration.menuModifierFlags
+        fileMenu.addItem(newWindowItem)
+        mainNewWindowMenuItem = newWindowItem
+
+        let reopenMenuItem = NSMenuItem(title: "Reopen Last Closed Window", action: #selector(handleReopenClosedPanel), keyEquivalent: "T")
+        reopenMenuItem.keyEquivalentModifierMask = [.command, .shift]
+        fileMenu.addItem(reopenMenuItem)
+
+        mainMenu.items
+            .flatMap { $0.submenu?.items ?? [] }
+            .forEach { $0.target = self }
+
+        NSApp.mainMenu = mainMenu
+    }
+
     func menuWillOpen(_ menu: NSMenu) {
         AnalyticsManager.shared.track("menu_clicked", properties: [:])
     }
@@ -717,6 +741,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hotKeyConfiguration.persistToDefaults()
         newWindowMenuItem?.keyEquivalent = configuration.menuKeyEquivalent
         newWindowMenuItem?.keyEquivalentModifierMask = configuration.menuModifierFlags
+        mainNewWindowMenuItem?.keyEquivalent = configuration.menuKeyEquivalent
+        mainNewWindowMenuItem?.keyEquivalentModifierMask = configuration.menuModifierFlags
         AnalyticsManager.shared.track(
             "preferences_updated",
             properties: [
