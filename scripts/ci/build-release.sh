@@ -86,20 +86,30 @@ XCODEBUILD_ARGS=(
 if [[ "$SKIP_SIGNING" == "1" ]]; then
   XCODEBUILD_ARGS+=(CODE_SIGNING_ALLOWED=NO)
 else
+  if [[ -n "${ANYFLOAT_RELEASE_KEYCHAIN:-}" ]]; then
+    CODE_SIGN_FLAGS="--timestamp --keychain ${ANYFLOAT_RELEASE_KEYCHAIN}"
+  else
+    CODE_SIGN_FLAGS="--timestamp"
+  fi
+
   XCODEBUILD_ARGS+=(
     CODE_SIGNING_ALLOWED=YES
     CODE_SIGN_STYLE=Manual
     CODE_SIGN_IDENTITY="${CODESIGN_IDENTITY:-Developer ID Application}"
     DEVELOPMENT_TEAM="${APPLE_TEAM_ID:?APPLE_TEAM_ID is required for signed release builds}"
-    OTHER_CODE_SIGN_FLAGS="--timestamp"
+    OTHER_CODE_SIGN_FLAGS="$CODE_SIGN_FLAGS"
   )
 fi
 
 cd "$ROOT_DIR"
-HOME="$ROOT_DIR/.home" \
-TMPDIR="$ROOT_DIR/.tmp" \
-XDG_CACHE_HOME="$ROOT_DIR/.cache" \
-xcodebuild "${XCODEBUILD_ARGS[@]}"
+if [[ "$SKIP_SIGNING" == "1" ]]; then
+  HOME="$ROOT_DIR/.home" \
+  TMPDIR="$ROOT_DIR/.tmp" \
+  XDG_CACHE_HOME="$ROOT_DIR/.cache" \
+  xcodebuild "${XCODEBUILD_ARGS[@]}"
+else
+  TMPDIR="$ROOT_DIR/.tmp" xcodebuild "${XCODEBUILD_ARGS[@]}"
+fi
 
 ARCHIVED_APP_PATH="$ARCHIVE_PATH/Products/Applications/${APP_NAME}.app"
 if [[ ! -d "$ARCHIVED_APP_PATH" ]]; then
