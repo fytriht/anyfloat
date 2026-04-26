@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to build, without leading v"
+        description: "Release version to build, without leading v"
         required: true
         default: "0.0.0"
       publish:
@@ -38,28 +38,37 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          release_version_pattern='^[0-9]+[.][0-9]+[.][0-9]+(-(beta|rc)[.][0-9]+)?$'
 
           if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
             tag="${GITHUB_REF_NAME}"
-            if [[ ! "$tag" =~ ^v[0-9]+[.][0-9]+[.][0-9]+$ ]]; then
-              echo "error: release tags must match vX.Y.Z, got: $tag" >&2
+            release_version="${tag#v}"
+            if [[ ! "$release_version" =~ $release_version_pattern ]]; then
+              echo "error: release tags must match vX.Y.Z, vX.Y.Z-beta.N, or vX.Y.Z-rc.N; got: $tag" >&2
               exit 1
             fi
-            version="${tag#v}"
             publish="true"
           else
-            version="${{ inputs.version }}"
-            if [[ ! "$version" =~ ^[0-9]+[.][0-9]+[.][0-9]+$ ]]; then
-              echo "error: workflow_dispatch version must match X.Y.Z, got: $version" >&2
+            release_version="${{ inputs.version }}"
+            if [[ ! "$release_version" =~ $release_version_pattern ]]; then
+              echo "error: workflow_dispatch version must match X.Y.Z, X.Y.Z-beta.N, or X.Y.Z-rc.N; got: $release_version" >&2
               exit 1
             fi
-            tag="v${version}"
+            tag="v${release_version}"
             publish="${{ inputs.publish }}"
           fi
 
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          app_version="${release_version%%-*}"
+          prerelease="false"
+          if [[ "$release_version" == *"-"* ]]; then
+            prerelease="true"
+          fi
+
+          echo "release_version=$release_version" >> "$GITHUB_OUTPUT"
+          echo "app_version=$app_version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
 
       - name: Import Developer ID certificate
         env:
@@ -116,7 +125,7 @@ jobs:
         shell: bash
         run: |
           scripts/ci/build-release.sh \
-            --version "${{ steps.version.outputs.version }}" \
+            --version "${{ steps.version.outputs.app_version }}" \
             --build-number "${{ github.run_number }}"
 
       - name: Prepare App Store Connect API key
@@ -139,14 +148,14 @@ jobs:
         run: |
           scripts/ci/notarize.sh \
             --app "dist/release/AnyFloat.app" \
-            --version "${{ steps.version.outputs.version }}"
+            --version "${{ steps.version.outputs.release_version }}"
 
       - name: Verify notarized app
         shell: bash
         run: |
           scripts/ci/verify-release.sh \
             --app "dist/release/AnyFloat.app" \
-            --version "${{ steps.version.outputs.version }}" \
+            --version "${{ steps.version.outputs.app_version }}" \
             --build-number "${{ github.run_number }}"
 
       - name: Package release artifacts
@@ -154,16 +163,16 @@ jobs:
         run: |
           scripts/ci/package-release.sh \
             --app "dist/release/AnyFloat.app" \
-            --version "${{ steps.version.outputs.version }}"
+            --version "${{ steps.version.outputs.release_version }}"
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: anyfloat-${{ steps.version.outputs.version }}
+          name: anyfloat-${{ steps.version.outputs.release_version }}
           path: |
-            dist/release/AnyFloat-${{ steps.version.outputs.version }}.dmg
-            dist/release/AnyFloat-${{ steps.version.outputs.version }}.zip
-            dist/release/AnyFloat-${{ steps.version.outputs.version }}.sha256
+            dist/release/AnyFloat-${{ steps.version.outputs.release_version }}.dmg
+            dist/release/AnyFloat-${{ steps.version.outputs.release_version }}.zip
+            dist/release/AnyFloat-${{ steps.version.outputs.release_version }}.sha256
 
       - name: Publish GitHub Release
         if: steps.version.outputs.publish == 'true'
@@ -171,13 +180,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          args=()
+          if [[ "${{ steps.version.outputs.prerelease }}" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+
           gh release create "${{ steps.version.outputs.tag }}" \
-            "dist/release/AnyFloat-${{ steps.version.outputs.version }}.dmg" \
-            "dist/release/AnyFloat-${{ steps.version.outputs.version }}.zip" \
-            "dist/release/AnyFloat-${{ steps.version.outputs.version }}.sha256" \
-            --title "AnyFloat ${{ steps.version.outputs.version }}" \
+            "dist/release/AnyFloat-${{ steps.version.outputs.release_version }}.dmg" \
+            "dist/release/AnyFloat-${{ steps.version.outputs.release_version }}.zip" \
+            "dist/release/AnyFloat-${{ steps.version.outputs.release_version }}.sha256" \
+            --title "AnyFloat ${{ steps.version.outputs.release_version }}" \
             --generate-notes \
-            --target "$GITHUB_SHA"
+            --target "$GITHUB_SHA" \
+            "${args[@]}"
 
       - name: Delete temporary keychain
         if: always() && env.ANYFLOAT_RELEASE_KEYCHAIN != ''

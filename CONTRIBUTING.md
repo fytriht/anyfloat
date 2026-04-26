@@ -55,13 +55,22 @@ git tag v1.2.3
 git push origin v1.2.3
 ```
 
-Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`, which:
+Prerelease tags are also supported:
+
+```bash
+git tag v1.2.3-beta.1
+git push origin v1.2.3-beta.1
+```
+
+Supported release tag formats are `vX.Y.Z`, `vX.Y.Z-beta.N`, and `vX.Y.Z-rc.N`. Pushing one of these tags runs `.github/workflows/release.yml`, which:
 
 - builds the Release archive with `MARKETING_VERSION=X.Y.Z`
 - sets `CURRENT_PROJECT_VERSION` to the GitHub Actions run number
 - signs the app with Developer ID
 - notarizes and staples the app
-- uploads `AnyFloat-X.Y.Z.dmg`, `AnyFloat-X.Y.Z.zip`, and checksums to GitHub Releases
+- uploads `AnyFloat-<release-version>.dmg`, `AnyFloat-<release-version>.zip`, and checksums to GitHub Releases
+
+For prerelease tags, GitHub Releases are marked as prereleases. The app bundle still uses the base `MARKETING_VERSION` (`1.2.3` for `v1.2.3-beta.1`) because macOS bundle short versions must stay numeric.
 
 Manual workflow dispatch can build the same artifacts without publishing a GitHub Release when `publish` is false.
 

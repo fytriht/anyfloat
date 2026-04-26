@@ -6,12 +6,16 @@ APP_PATH=""
 VERSION=""
 APP_NAME="AnyFloat"
 DIST_DIR="$ROOT_DIR/dist/release"
+SKIP_SIGNING="${ANYFLOAT_SKIP_SIGNING:-0}"
 
 print_usage() {
   cat <<EOF
-Usage: $(basename "$0") --app path/to/AnyFloat.app --version X.Y.Z
+Usage: $(basename "$0") --app path/to/AnyFloat.app --version X.Y.Z[-beta.N|-rc.N]
 
 Creates release ZIP, DMG, and SHA-256 checksum artifacts under dist/release.
+
+Environment:
+  ANYFLOAT_SKIP_SIGNING=1  Skip ZIP codesign verification for local unsigned dry runs.
 EOF
 }
 
@@ -42,8 +46,8 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
-if [[ ! "$VERSION" =~ ^[0-9]+[.][0-9]+[.][0-9]+$ ]]; then
-  echo "error: --version must match X.Y.Z" >&2
+if [[ ! "$VERSION" =~ ^[0-9]+[.][0-9]+[.][0-9]+(-(beta|rc)[.][0-9]+)?$ ]]; then
+  echo "error: --version must match X.Y.Z, X.Y.Z-beta.N, or X.Y.Z-rc.N" >&2
   exit 1
 fi
 
@@ -58,10 +62,14 @@ ZIP_VERIFY_DIR="$DIST_DIR/${APP_NAME}-${VERSION}-zip-verify"
 rm -rf "$ZIP_PATH" "$DMG_STAGING_DIR" "$DMG_PATH" "$CHECKSUM_PATH" "$ZIP_VERIFY_DIR"
 
 ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
-mkdir -p "$ZIP_VERIFY_DIR"
-ditto -x -k "$ZIP_PATH" "$ZIP_VERIFY_DIR"
-codesign --verify --deep --strict --verbose=4 "$ZIP_VERIFY_DIR/${APP_NAME}.app"
-rm -rf "$ZIP_VERIFY_DIR"
+if [[ "$SKIP_SIGNING" == "1" ]]; then
+  echo "Skipping ZIP codesign verification because ANYFLOAT_SKIP_SIGNING=1."
+else
+  mkdir -p "$ZIP_VERIFY_DIR"
+  ditto -x -k "$ZIP_PATH" "$ZIP_VERIFY_DIR"
+  codesign --verify --deep --strict --verbose=4 "$ZIP_VERIFY_DIR/${APP_NAME}.app"
+  rm -rf "$ZIP_VERIFY_DIR"
+fi
 
 mkdir -p "$DMG_STAGING_DIR"
 ditto "$APP_PATH" "$DMG_STAGING_DIR/${APP_NAME}.app"

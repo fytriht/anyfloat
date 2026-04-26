@@ -8,7 +8,7 @@ SKIP_NOTARIZATION="${ANYFLOAT_SKIP_NOTARIZATION:-0}"
 
 print_usage() {
   cat <<EOF
-Usage: $(basename "$0") --app path/to/AnyFloat.app --version X.Y.Z
+Usage: $(basename "$0") --app path/to/AnyFloat.app --version X.Y.Z[-beta.N|-rc.N]
 
 Submits the app to Apple's notary service, staples the ticket, and assesses it.
 
@@ -47,8 +47,8 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
-if [[ ! "$VERSION" =~ ^[0-9]+[.][0-9]+[.][0-9]+$ ]]; then
-  echo "error: --version must match X.Y.Z" >&2
+if [[ ! "$VERSION" =~ ^[0-9]+[.][0-9]+[.][0-9]+(-(beta|rc)[.][0-9]+)?$ ]]; then
+  echo "error: --version must match X.Y.Z, X.Y.Z-beta.N, or X.Y.Z-rc.N" >&2
   exit 1
 fi
 
