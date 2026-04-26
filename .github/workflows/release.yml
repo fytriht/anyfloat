@@ -102,6 +102,12 @@ jobs:
             echo "Export the .p12 from Keychain Access > My Certificates after installing the Apple-issued Developer ID Application certificate." >&2
             exit 1
           fi
+          if [[ "$identity" != *"($APPLE_TEAM_ID)"* ]]; then
+            echo "error: APPLE_TEAM_ID does not match the imported Developer ID Application certificate." >&2
+            echo "The imported identity is: $identity" >&2
+            echo "Set APPLE_TEAM_ID to the value in parentheses at the end of that identity." >&2
+            exit 1
+          fi
 
           echo "ANYFLOAT_RELEASE_KEYCHAIN=$keychain_path" >> "$GITHUB_ENV"
           echo "CODESIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
