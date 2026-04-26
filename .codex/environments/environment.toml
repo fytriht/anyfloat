@@ -3,9 +3,26 @@ version = 1
 name = "AnyFloat"
 
 [setup]
-script = ""
+script = """
+mkdir -p .build/module-cache .build/module-cache-cc .build-xcode .cache .home .tmp dist/release
+"""
 
 [[actions]]
-name = "Run AnyFloat-Debug"
+name = "Build Debug"
+icon = "hammer"
+command = "xcodebuild -project AnyFloat.xcodeproj -scheme AnyFloat -configuration Debug -derivedDataPath .build-xcode build CODE_SIGNING_ALLOWED=NO"
+
+[[actions]]
+name = "Run Debug App"
 icon = "run"
-command = "./scripts/package_app.sh && open ./dist/AnyFloat-Debug.app"
+command = "xcodebuild -project AnyFloat.xcodeproj -scheme AnyFloat -configuration Debug -derivedDataPath .build-xcode build CODE_SIGNING_ALLOWED=NO && open ./.build-xcode/Build/Products/Debug/AnyFloat.app"
+
+[[actions]]
+name = "Build Release"
+icon = "hammer"
+command = "xcodebuild -project AnyFloat.xcodeproj -scheme AnyFloat -configuration Release -derivedDataPath .build-xcode build CODE_SIGNING_ALLOWED=NO"
+
+[[actions]]
+name = "Release Smoke Test"
+icon = "test"
+command = "ANYFLOAT_SKIP_SIGNING=1 scripts/ci/build-release.sh --version 0.0.0 --build-number 1 && ANYFLOAT_SKIP_SIGNING=1 ANYFLOAT_SKIP_NOTARIZATION=1 scripts/ci/verify-release.sh --app dist/release/AnyFloat.app --version 0.0.0 --build-number 1 && ANYFLOAT_SKIP_SIGNING=1 scripts/ci/package-release.sh --app dist/release/AnyFloat.app --version 0.0.0"
