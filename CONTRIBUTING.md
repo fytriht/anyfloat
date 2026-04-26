@@ -89,7 +89,7 @@ Local unsigned release helper smoke test:
 ```bash
 ANYFLOAT_SKIP_SIGNING=1 scripts/ci/build-release.sh --version 0.0.0 --build-number 1
 ANYFLOAT_SKIP_SIGNING=1 ANYFLOAT_SKIP_NOTARIZATION=1 scripts/ci/verify-release.sh --app dist/release/AnyFloat.app --version 0.0.0 --build-number 1
-scripts/ci/package-release.sh --app dist/release/AnyFloat.app --version 0.0.0
+ANYFLOAT_SKIP_SIGNING=1 scripts/ci/package-release.sh --app dist/release/AnyFloat.app --version 0.0.0
 ```
 
 Release helper outputs are under `dist/release/`.

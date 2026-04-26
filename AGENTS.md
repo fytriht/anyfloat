@@ -31,14 +31,14 @@ This file defines repository-specific instructions for coding agents working in 
   - Debug: `./.build-xcode/Build/Products/Debug/AnyFloat.app/Contents/MacOS/AnyFloat`
   - Release: `./.build-xcode/Build/Products/Release/AnyFloat.app/Contents/MacOS/AnyFloat`
 - Local unsigned release helper smoke test: `ANYFLOAT_SKIP_SIGNING=1 scripts/ci/build-release.sh --version 0.0.0 --build-number 1`
-- Package local release artifact after a helper build: `scripts/ci/package-release.sh --app dist/release/AnyFloat.app --version 0.0.0`
+- Package local unsigned release artifact after a helper build: `ANYFLOAT_SKIP_SIGNING=1 scripts/ci/package-release.sh --app dist/release/AnyFloat.app --version 0.0.0`
 
 Before finishing changes, run verification only when relevant:
 1. If app code, project config, or build scripts changed, run: `xcodebuild -project AnyFloat.xcodeproj -scheme AnyFloat -configuration Debug -derivedDataPath .build-xcode build CODE_SIGNING_ALLOWED=NO`
 2. If release workflow or CI packaging helpers changed, run the local unsigned release helper smoke test when feasible:
    - `ANYFLOAT_SKIP_SIGNING=1 scripts/ci/build-release.sh --version 0.0.0 --build-number 1`
    - `ANYFLOAT_SKIP_SIGNING=1 ANYFLOAT_SKIP_NOTARIZATION=1 scripts/ci/verify-release.sh --app dist/release/AnyFloat.app --version 0.0.0 --build-number 1`
-   - `scripts/ci/package-release.sh --app dist/release/AnyFloat.app --version 0.0.0`
+   - `ANYFLOAT_SKIP_SIGNING=1 scripts/ci/package-release.sh --app dist/release/AnyFloat.app --version 0.0.0`
 3. If only documentation/non-executable files changed (for example, `.md`), build verification can be skipped.
 
 ## Coding Guidelines
