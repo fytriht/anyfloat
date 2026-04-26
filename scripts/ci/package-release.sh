@@ -53,10 +53,15 @@ ZIP_PATH="$DIST_DIR/${APP_NAME}-${VERSION}.zip"
 DMG_STAGING_DIR="$DIST_DIR/${APP_NAME}-${VERSION}-dmg"
 DMG_PATH="$DIST_DIR/${APP_NAME}-${VERSION}.dmg"
 CHECKSUM_PATH="$DIST_DIR/${APP_NAME}-${VERSION}.sha256"
+ZIP_VERIFY_DIR="$DIST_DIR/${APP_NAME}-${VERSION}-zip-verify"
 
-rm -rf "$ZIP_PATH" "$DMG_STAGING_DIR" "$DMG_PATH" "$CHECKSUM_PATH"
+rm -rf "$ZIP_PATH" "$DMG_STAGING_DIR" "$DMG_PATH" "$CHECKSUM_PATH" "$ZIP_VERIFY_DIR"
 
-ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
+ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
+mkdir -p "$ZIP_VERIFY_DIR"
+ditto -x -k "$ZIP_PATH" "$ZIP_VERIFY_DIR"
+codesign --verify --deep --strict --verbose=4 "$ZIP_VERIFY_DIR/${APP_NAME}.app"
+rm -rf "$ZIP_VERIFY_DIR"
 
 mkdir -p "$DMG_STAGING_DIR"
 ditto "$APP_PATH" "$DMG_STAGING_DIR/${APP_NAME}.app"
