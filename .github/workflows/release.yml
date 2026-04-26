@@ -83,6 +83,7 @@ jobs:
           security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$keychain_path"
           security set-keychain-settings -lut 21600 "$keychain_path"
           security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$keychain_path"
+          security default-keychain -s "$keychain_path"
           security import "$cert_path" \
             -P "$APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD" \
             -A \
@@ -92,7 +93,18 @@ jobs:
           security list-keychain -d user -s "$keychain_path"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$APPLE_KEYCHAIN_PASSWORD" "$keychain_path"
 
+          echo "Available code signing identities:"
+          security find-identity -v -p codesigning "$keychain_path"
+
+          identity="$(security find-identity -v -p codesigning "$keychain_path" | awk -F '"' '/Developer ID Application/ { print $2; exit }')"
+          if [[ -z "$identity" ]]; then
+            echo "error: no Developer ID Application identity with a private key was found in the imported .p12." >&2
+            echo "Export the .p12 from Keychain Access > My Certificates after installing the Apple-issued Developer ID Application certificate." >&2
+            exit 1
+          fi
+
           echo "ANYFLOAT_RELEASE_KEYCHAIN=$keychain_path" >> "$GITHUB_ENV"
+          echo "CODESIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
 
       - name: Build signed app archive
         shell: bash
