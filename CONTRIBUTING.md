@@ -5,13 +5,14 @@ Thanks for contributing to AnyFloat.
 ## Development Environment
 
 - macOS 13+
-- Full Xcode app selected for `xcodebuild` (used for build and packaging)
+- Full Xcode app selected for `xcodebuild` (used for local builds and release packaging)
 
 ## Project Structure
 
 ```text
 Sources/AnyFloatApp/AnyFloatApp.swift   # app entry, hotkey, AX reader, floating panel
-scripts/package_app.sh                  # archive/export/signing (+ optional dmg)
+scripts/ci/                             # release build, notarization, packaging, verification helpers
+.github/workflows/release.yml           # tag-driven GitHub Releases workflow
 AnyFloat.xcodeproj                      # Xcode project
 ```
 
@@ -45,27 +46,44 @@ Run with Xcode:
 2. Select the `AnyFloat` scheme
 3. Press `Command + R`
 
-## Packaging
+## Release Packaging
 
-Debug app bundle:
-
-```bash
-./scripts/package_app.sh
-```
-
-Release app bundle:
+Release artifacts are built by GitHub Actions from tags. The release source of truth is the Git tag:
 
 ```bash
-./scripts/package_app.sh --release
+git tag v1.2.3
+git push origin v1.2.3
 ```
 
-Optional DMG:
+Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`, which:
+
+- builds the Release archive with `MARKETING_VERSION=X.Y.Z`
+- sets `CURRENT_PROJECT_VERSION` to the GitHub Actions run number
+- signs the app with Developer ID
+- notarizes and staples the app
+- uploads `AnyFloat-X.Y.Z.dmg`, `AnyFloat-X.Y.Z.zip`, and checksums to GitHub Releases
+
+Manual workflow dispatch can build the same artifacts without publishing a GitHub Release when `publish` is false.
+
+Repository secrets required for signed releases:
+
+- `APPLE_DEVELOPER_ID_CERTIFICATE_BASE64`
+- `APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD`
+- `APPLE_KEYCHAIN_PASSWORD`
+- `APPLE_TEAM_ID`
+- `APP_STORE_CONNECT_API_KEY_ID`
+- `APP_STORE_CONNECT_API_ISSUER_ID`
+- `APP_STORE_CONNECT_API_KEY_P8`
+
+Local unsigned release helper smoke test:
 
 ```bash
-./scripts/package_app.sh [--debug|--release] --dmg
+ANYFLOAT_SKIP_SIGNING=1 scripts/ci/build-release.sh --version 0.0.0 --build-number 1
+ANYFLOAT_SKIP_SIGNING=1 ANYFLOAT_SKIP_NOTARIZATION=1 scripts/ci/verify-release.sh --app dist/release/AnyFloat.app --version 0.0.0 --build-number 1
+scripts/ci/package-release.sh --app dist/release/AnyFloat.app --version 0.0.0
 ```
 
-Default outputs are under `dist/`.
+Release helper outputs are under `dist/release/`.
 
 ## Coding Guidelines
 
@@ -82,7 +100,7 @@ Default outputs are under `dist/`.
 At minimum, run:
 
 1. `xcodebuild -project AnyFloat.xcodeproj -scheme AnyFloat -configuration Debug -derivedDataPath .build-xcode build CODE_SIGNING_ALLOWED=NO`
-2. `./scripts/package_app.sh` if packaging-related files changed
+2. The local unsigned release helper smoke test if release workflow or packaging helpers changed
 
 If behavior changes, add/update docs accordingly.
 
@@ -101,5 +119,5 @@ If behavior changes, add/update docs accordingly.
 
 - [ ] Scope is focused and avoids unrelated refactors
 - [ ] Build succeeds (`xcodebuild -project AnyFloat.xcodeproj -scheme AnyFloat -configuration Debug -derivedDataPath .build-xcode build CODE_SIGNING_ALLOWED=NO`)
-- [ ] Packaging verified if relevant (`./scripts/package_app.sh`)
+- [ ] Release helper smoke test completed if relevant
 - [ ] Documentation updated when needed

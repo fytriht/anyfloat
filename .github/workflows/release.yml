@@ -1,0 +1,168 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build, without leading v"
+        required: true
+        default: "0.0.0"
+      publish:
+        description: "Publish a GitHub Release"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build, notarize, and publish
+    runs-on: macos-14
+    timeout-minutes: 45
+
+    env:
+      APP_NAME: AnyFloat
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            tag="${GITHUB_REF_NAME}"
+            if [[ ! "$tag" =~ ^v[0-9]+[.][0-9]+[.][0-9]+$ ]]; then
+              echo "error: release tags must match vX.Y.Z, got: $tag" >&2
+              exit 1
+            fi
+            version="${tag#v}"
+            publish="true"
+          else
+            version="${{ inputs.version }}"
+            if [[ ! "$version" =~ ^[0-9]+[.][0-9]+[.][0-9]+$ ]]; then
+              echo "error: workflow_dispatch version must match X.Y.Z, got: $version" >&2
+              exit 1
+            fi
+            tag="v${version}"
+            publish="${{ inputs.publish }}"
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+      - name: Import Developer ID certificate
+        env:
+          APPLE_DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_BASE64 }}
+          APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cert_path="$RUNNER_TEMP/developer-id.p12"
+          keychain_path="$RUNNER_TEMP/anyfloat-release.keychain-db"
+
+          if [[ -z "${APPLE_DEVELOPER_ID_CERTIFICATE_BASE64:-}" ]]; then
+            echo "error: missing APPLE_DEVELOPER_ID_CERTIFICATE_BASE64 secret" >&2
+            exit 1
+          fi
+
+          printf '%s' "$APPLE_DEVELOPER_ID_CERTIFICATE_BASE64" | base64 -D > "$cert_path"
+
+          security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$keychain_path"
+          security import "$cert_path" \
+            -P "$APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$keychain_path"
+          security list-keychain -d user -s "$keychain_path"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$APPLE_KEYCHAIN_PASSWORD" "$keychain_path"
+
+          echo "ANYFLOAT_RELEASE_KEYCHAIN=$keychain_path" >> "$GITHUB_ENV"
+
+      - name: Build signed app archive
+        shell: bash
+        run: |
+          scripts/ci/build-release.sh \
+            --version "${{ steps.version.outputs.version }}" \
+            --build-number "${{ github.run_number }}"
+
+      - name: Prepare App Store Connect API key
+        env:
+          APP_STORE_CONNECT_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          key_path="$RUNNER_TEMP/AuthKey_${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}.p8"
+          printf '%s' "$APP_STORE_CONNECT_API_KEY_P8" > "$key_path"
+          chmod 600 "$key_path"
+          echo "APP_STORE_CONNECT_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+
+      - name: Notarize and staple app
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+        shell: bash
+        run: |
+          scripts/ci/notarize.sh \
+            --app "dist/release/AnyFloat.app" \
+            --version "${{ steps.version.outputs.version }}"
+
+      - name: Verify notarized app
+        shell: bash
+        run: |
+          scripts/ci/verify-release.sh \
+            --app "dist/release/AnyFloat.app" \
+            --version "${{ steps.version.outputs.version }}" \
+            --build-number "${{ github.run_number }}"
+
+      - name: Package release artifacts
+        shell: bash
+        run: |
+          scripts/ci/package-release.sh \
+            --app "dist/release/AnyFloat.app" \
+            --version "${{ steps.version.outputs.version }}"
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: anyfloat-${{ steps.version.outputs.version }}
+          path: |
+            dist/release/AnyFloat-${{ steps.version.outputs.version }}.dmg
+            dist/release/AnyFloat-${{ steps.version.outputs.version }}.zip
+            dist/release/AnyFloat-${{ steps.version.outputs.version }}.sha256
+
+      - name: Publish GitHub Release
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            "dist/release/AnyFloat-${{ steps.version.outputs.version }}.dmg" \
+            "dist/release/AnyFloat-${{ steps.version.outputs.version }}.zip" \
+            "dist/release/AnyFloat-${{ steps.version.outputs.version }}.sha256" \
+            --title "AnyFloat ${{ steps.version.outputs.version }}" \
+            --generate-notes \
+            --target "$GITHUB_SHA"
+
+      - name: Delete temporary keychain
+        if: always() && env.ANYFLOAT_RELEASE_KEYCHAIN != ''
+        shell: bash
+        run: |
+          security delete-keychain "$ANYFLOAT_RELEASE_KEYCHAIN" || true
