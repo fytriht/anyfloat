@@ -30,15 +30,19 @@ Release build:
 xcodebuild -project AnyFloat.xcodeproj -scheme AnyFloat -configuration Release -derivedDataPath .build-xcode build CODE_SIGNING_ALLOWED=NO
 ```
 
-Run built binary:
+Run built app through LaunchServices:
 
 ```bash
 # Debug
-./.build-xcode/Build/Products/Debug/AnyFloat.app/Contents/MacOS/AnyFloat
+open -n .build-xcode/Build/Products/Debug/AnyFloat.app
 
 # Release
-./.build-xcode/Build/Products/Release/AnyFloat.app/Contents/MacOS/AnyFloat
+open -n .build-xcode/Build/Products/Release/AnyFloat.app
 ```
+
+Do not run `Contents/MacOS/AnyFloat` directly when verifying menu bar behavior. Launching the Mach-O directly bypasses LaunchServices and can leave the status item off-screen even though the app and global hotkey are running.
+
+Debug and Release builds intentionally share the `com.anyfloat.app` bundle identifier so macOS uses the same menu bar status item placement.
 
 Run with Xcode:
 

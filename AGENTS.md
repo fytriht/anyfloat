@@ -27,9 +27,11 @@ This file defines repository-specific instructions for coding agents working in 
 ## Build, Run, Verify
 - Debug build: `xcodebuild -project AnyFloat.xcodeproj -scheme AnyFloat -configuration Debug -derivedDataPath .build-xcode build CODE_SIGNING_ALLOWED=NO`
 - Release build: `xcodebuild -project AnyFloat.xcodeproj -scheme AnyFloat -configuration Release -derivedDataPath .build-xcode build CODE_SIGNING_ALLOWED=NO`
-- Run built binary:
-  - Debug: `./.build-xcode/Build/Products/Debug/AnyFloat.app/Contents/MacOS/AnyFloat`
-  - Release: `./.build-xcode/Build/Products/Release/AnyFloat.app/Contents/MacOS/AnyFloat`
+- Run built app through LaunchServices:
+  - Debug: `open -n .build-xcode/Build/Products/Debug/AnyFloat.app`
+  - Release: `open -n .build-xcode/Build/Products/Release/AnyFloat.app`
+  - Do not run `Contents/MacOS/AnyFloat` directly for menu bar verification; bypassing LaunchServices can leave the status item off-screen even though the app and hotkey are running.
+  - Debug and Release intentionally share `com.anyfloat.app` so macOS uses the same menu bar status item placement.
 - Local unsigned release helper smoke test: `ANYFLOAT_SKIP_SIGNING=1 scripts/ci/build-release.sh --version 0.0.0 --build-number 1`
 - Package local unsigned release artifact after a helper build: `ANYFLOAT_SKIP_SIGNING=1 scripts/ci/package-release.sh --app dist/release/AnyFloat.app --version 0.0.0`
 
